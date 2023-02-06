@@ -1,0 +1,401 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from pandas import Series
+
+
+# =============================================================================
+# def plottype(i):
+#     if i == 0:
+#         %matplotlib inline
+#     if i == 1:
+#         %matplotlib qt5
+# =============================================================================
+        
+def generate_poisson_times(AP_rate, n_seconds):
+    #Generates AP's per second in n_seconds seconds.
+    AP_times = np.cumsum(np.random.exponential( 1./AP_rate, size = int(AP_rate*n_seconds)))
+    return AP_times[AP_times <= n_seconds]
+
+def update_all(params):
+    
+    t_current = params[0]
+    t_previous = params[1]
+    refractory_period = params[2]
+    fired_recently = params[3]
+    vesicle_refill_time = params[4]
+    tau = params[5]
+    E = params[6]
+    vesicle_refill_history = params[7]
+    v_membrane = params[8]
+    v_coeff = params[9]
+    v_history = params[10]
+    vesicle_release_history = params[11]
+    E_history = params[12]   
+    previous_AP_time = params[13]
+    AP_history = params[14]
+    M = params[15]
+    vesicle_release_probability = params[16]
+    outside_of_refractory_period = params[17]
+    v_thresh_history = params[18]
+    v_thresh = params[19]
+    v_thresh_init = params[20]
+    v_thresh_reduction_coeff = params[21]
+    test_type = params[22]
+
+    #Check to see if the neuron is able to fire, which means outside of its
+    #refractory period after having fired.
+
+    if fired_recently == True:
+        t_previous = previous_AP_time
+
+    t_difference = t_current - t_previous
+    outside_of_refractory_period = (t_current - previous_AP_time\
+                                    > refractory_period)
+
+    # Not firing, outside of refractory period.
+    if (fired_recently == True) and (outside_of_refractory_period == True):
+        fired_recently = False
+        
+     
+    # Not firing, still in refractory period
+    if (fired_recently == True) and (outside_of_refractory_period == False):
+        
+        # Update voltage to be 0 when in the refractory period
+        v_membrane = 0
+        v_history.append(v_membrane)
+    
+        # Refill vesicles
+        refill_ratio = 1 - np.exp(-t_difference / vesicle_refill_time)
+        vesicles_refilled = np.random.binomial(E, refill_ratio)
+        vesicle_refill_history.append(vesicles_refilled)
+        E -= vesicles_refilled
+        vesicle_refill_time = np.random.uniform(8, 14) * (1e-3)
+
+        # Release vesicles
+        vesicles_released = np.random.binomial(M-E, vesicle_release_probability)
+        vesicle_release_history.append(vesicles_released)
+        E += vesicles_released
+        E_history.append(E)
+        
+        if test_type == 'FB':
+            #Reduce threshold
+            if v_thresh > v_thresh_init:      
+                v_thresh = v_thresh*np.exp(-t_difference/v_thresh_reduction_coeff)
+            else:
+                v_thresh == v_thresh_init
+                
+            v_thresh_history.append(v_thresh)
+        
+        
+    # Firing part
+    if fired_recently == False:
+        
+        # Refill vesicles
+        refill_ratio = 1 - np.exp(-t_difference / vesicle_refill_time)
+        vesicles_refilled = np.random.binomial(E, refill_ratio)
+        vesicle_refill_history.append(vesicles_refilled)
+        E -= vesicles_refilled
+        vesicle_refill_time = np.random.uniform(8, 14) * (1e-3)
+
+        # Release vesicles
+        vesicles_released = np.random.binomial(M-E, vesicle_release_probability)
+        vesicle_release_history.append(vesicles_released)
+        E += vesicles_released
+        E_history.append(E)
+    
+        # Change the voltage
+        reduction = np.exp(-(t_difference)/ tau)
+        v_membrane = v_membrane*reduction + v_coeff*vesicles_released
+        v_history.append(v_membrane)
+        
+        # Reduce threshold
+        
+        if test_type == 'FB':
+            
+            if v_thresh > v_thresh_init:      
+                v_thresh = v_thresh*np.exp(-t_difference/v_thresh_reduction_coeff)
+            else:
+                v_thresh == v_thresh_init  
+            v_thresh_history.append(v_thresh)
+        
+# =============================================================================
+#         firing_decision = get_firing_decision(sigmoid(v_membrane))
+#         
+#         if firing_decision:
+#             fired_recently = True
+#             outside_of_refractory_period = False
+#             previous_AP_time = t_current
+#             AP_history.append(t_current)
+#             v_membrane = 0    
+# =============================================================================
+        
+        
+        if v_membrane >= v_thresh:
+            if test_type == 'FB':
+                v_thresh += (v_membrane - v_thresh)
+            fired_recently = True
+            outside_of_refractory_period = False
+            previous_AP_time = t_current
+            AP_history.append(t_current)
+            v_membrane = 0
+
+    
+    t_previous = t_current
+    
+    out_parameters = M, E, E_history, vesicle_release_history, \
+        vesicle_refill_history, v_history, v_membrane, previous_AP_time, \
+            t_previous, AP_history, vesicle_release_probability,\
+               outside_of_refractory_period, fired_recently, v_thresh_history,\
+                   v_thresh
+    
+    return out_parameters
+               
+
+def plot_histories(firing_times, n_seconds, v_history, E_hisory,
+                   b_history, AP_history, statistics, tau, plot_nums, 
+                   v_thresh_history, test_type):
+
+    if 0 in plot_nums:
+        
+        figure, axis = plt.subplots(2,3)
+        figure.suptitle('Main title')
+    
+        # Membrane voltage plot
+        
+        axis[0,0].set_title('v_history')
+        axis[0,0].set_xlim([0, n_seconds])
+        v_mod, t_mod = modify_v_history(v_history, firing_times, AP_history)
+        axis[0,0].plot(t_mod, v_mod, color = 'k')
+        if test_type == 'FB':
+            axis[0,0].plot(firing_times, v_thresh_history)
+        else:
+            axis[0,0].plot(np.linspace(0,n_seconds, 1000),v_thresh*np.ones(1000))   
+        v_at_APs = []
+        for i in range(len(AP_history)):
+            for j in range(len(firing_times)):
+                if firing_times[j] == AP_history[i]:
+                    v_at_APs.append(v_history[j])
+        axis[0,0].scatter(AP_history, v_at_APs, color = 'red')
+    
+        # E_history plot
+        
+        axis[0,2].scatter(firing_times, E_history)
+        axis[0,2].set_title('E_history')
+        axis[0,2].set_xlim([0, n_seconds])
+    
+        axis[1,1].scatter(firing_times, vesicle_refill_history)
+        axis[1,1].set_title('vesicle_refill_history')
+        axis[1,1].set_xlim([0, n_seconds])
+    
+        axis[1,2].scatter(firing_times, b_history)
+        axis[1,2].set_title('vesicle_release_history')
+        axis[1,2].set_xlim([0, n_seconds])
+    
+        axis[0,1].vlines(x= firing_times, ymin = 1, ymax = 1.5,
+                   colors = 'black', label ='Firing_times')
+        axis[0,1].set_ylim(0,2.5)
+        axis[0,1].set_xlim(0,n_seconds)
+        
+        axis[0,1].set_yticklabels([])
+        axis[0,1].set_title('Firing_times')
+        axis[0,1].set_xlim([0, n_seconds])
+    
+        axis[1,0].vlines(x = AP_history, ymin = 0, ymax = v_thresh,
+                         colors = 'black', label = 'AP times')
+        axis[1,0].set_title('AP_history')
+        axis[1,0].set_xlim([0,n_seconds])
+        axis[1,0].set_xlabel('Seconds')
+    
+    if 1 in plot_nums:
+        # Second plot for statistics
+        plt.figure()
+        
+        if test_type == 'FB':
+            plt.title('Time intervals between action potentials, feedback')
+        else:
+            plt.title('Time intervals between action potentials')
+        plt.plot(statistics[0], label = 'Inter-AP-time')
+        plt.plot([0], [0], label = 'Mean = {}'.format(np.round(statistics[1], 3)))
+        plt.plot([0], [0], label = 'CV = {}'.format(np.round(statistics[2], 3)))
+        plt.plot([0], [0], label = 'Fano = {}'.format(np.round(statistics[3], 3)))
+        plt.plot([0], [0], label = 'Autocorrelation = {}'.format(np.round(statistics[4],3)))
+        plt.xlabel('Time interval between i-th and i+1-th action potential')
+        plt.ylabel('Time between action potentials in seconds')
+
+    plt.legend()
+    plt.show()
+
+
+def get_statistics(AP_history):
+
+    if ((len(AP_history) == 0) or (len(AP_history) == 1)):
+        return [[0], 0, 0, 0, 0]
+
+    #T_inter is inter action potential arrival times, time between each action potential
+    T_inter = [AP_history[i+1] - AP_history[i] for i in range(len(AP_history)-1)]
+    mean_inter = np.mean(T_inter)
+    CV_inter = np.std(T_inter)/mean_inter
+    fano_inter = np.var(T_inter)/mean_inter
+
+    if len(AP_history) == 2:
+        autocorr_inter = 0
+    else:
+        autocorr_inter = Series(T_inter).autocorr()
+
+    statistics = [T_inter, mean_inter, CV_inter, fano_inter, autocorr_inter]
+
+    return statistics
+
+def modify_v_history(v_history, firing_times, AP_history):
+    
+    #Modify the voltage to make it suitable for plotting
+
+    #Voltage drops to graphing
+    drops = []
+    times = []
+    n_samples = 100
+
+    initial_drop = np.zeros(n_samples)
+    initial_time = np.linspace(0, firing_times[0], n_samples)
+
+    drops.append(initial_drop)
+    times.append(initial_time)
+    
+    for i in range(len(firing_times) - 1):
+        t_current = firing_times[i]
+        t_next = firing_times[i+1]
+        t_diff = t_next - t_current
+        
+        if t_current in AP_history:
+            drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/(1e-6))
+        else:
+            drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/tau)
+        drops.append(drop)
+        time = np.linspace(t_current, t_next, n_samples)
+        times.append(time)
+
+    last_AP_plot_size = 0.1
+    drop_last = v_history[i+1]*np.exp(-(np.linspace(0, last_AP_plot_size, n_samples))/tau)
+    time_last = np.linspace(t_next, t_next + last_AP_plot_size, n_samples)
+
+    drops.append(drop_last)
+    times.append(time_last)
+
+    return np.array(drops).reshape(-1,), np.array(times).reshape(-1,)
+
+
+def sigmoid(v, y1=-13, y2=60, v0=0, vth=0.2):
+    m = (y2-y1) / (vth-v0)
+    y = m*v - y2
+    return 1/ (1 +np.exp(-y))
+
+def get_firing_decision(percentage):
+    return np.random.uniform(0,1) <= percentage
+
+
+
+######################################################################################
+#Start
+
+# Setup
+
+test_type = 'NFB'  #'FB' for feedback, 'NFB' for non-feedback
+AP_per_second = 300#300
+n_seconds = 60 #60 seconds/min * 60 minutes = 3600 seconds
+firing_times = generate_poisson_times(AP_per_second, n_seconds)
+#firing_times = np.linspace(.1,.9, 50)
+v_coeff = 0.02       #0.02, voltage released
+vesicle_release_probability = 0.8        #Probability of release of a vesicles
+v_thresh = 0.2  #Threshold voltage to AP. 0.2
+v_thresh_reduction_coeff = 1
+v_thresh_init = v_thresh
+v_membrane = 0  #Membrane voltage
+tau = 20e-3    #Refractory period for the testing neuron, 20e-3
+M = 10          #Total number of vesicles
+E = 5           #Number of empty vesicles
+refractory_period = 0.001 #Time when action potentials are not allowed to fire, 0.001
+outside_of_refractory_period = True
+vesicle_refill_time = np.random.uniform(8,14)*(1e-3)
+fired_recently = False
+previous_AP_time = -np.inf
+
+#History matrices
+
+E_history = []
+vesicle_release_history = []
+vesicle_refill_history = []
+v_history = []
+AP_history = []
+v_thresh_history = []
+
+
+t_previous = 0
+
+
+for i, t_current in enumerate(firing_times):
+    print(i/len(firing_times))
+    
+    parameters = [t_current, t_previous, refractory_period, fired_recently,
+                   vesicle_refill_time, tau, E, vesicle_refill_history, v_membrane, v_coeff,
+                   v_history, vesicle_release_history, E_history, previous_AP_time,
+                   AP_history, M, vesicle_release_probability, 
+                   outside_of_refractory_period, v_thresh_history, v_thresh,
+                   v_thresh_init, v_thresh_reduction_coeff, test_type]
+    
+    M, E, E_history, vesicle_release_history, vesicle_refill_history, \
+    v_history, v_membrane, previous_AP_time, t_previous, AP_history,\
+    vesicle_release_probability, outside_of_refractory_period, fired_recently,\
+    v_thresh_history, v_thresh = \
+    update_all(parameters)
+
+v_mod, t_mod= modify_v_history(v_history, firing_times, AP_history)
+
+statistics = get_statistics(AP_history)
+
+
+# =============================================================================
+# plt.plot(t_mod,v_mod)
+# plt.plot(t_mod, 0.2 + 0*v_mod)
+# print(histories)
+# =============================================================================
+plot_nums = [0,1]
+plot_histories(firing_times, n_seconds, v_history, E_history,
+               vesicle_release_history, AP_history, statistics, tau, plot_nums,
+               v_thresh_history, test_type)
+
+if v_thresh_history == []:
+    v_thresh_history = v_thresh +0*np.linspace(0,n_seconds, len(firing_times))
+
+plt.figure()
+plt.plot(firing_times, v_history, label = 'v_history')
+plt.plot(firing_times, v_thresh_history, label = 'v_thresh_history')
+plt.plot(t_mod, v_mod,label = 'mod_v_history')
+plt.legend()
+plt.show()
+
+
+
+
+
+        
+plt.figure()
+if test_type == 'FB':
+    plt.title('Membrane voltage history, feedback')
+else:
+    plt.title('Membrane voltage history, no feedback')
+    
+plt.xlim([0, n_seconds])
+plt.xlabel('Seconds')
+plt.ylabel('Voltage')
+v_mod, t_mod = modify_v_history(v_history, firing_times, AP_history)
+plt.plot(t_mod, v_mod, color = 'k')
+if test_type == 'FB':
+    plt.plot(firing_times, v_thresh_history)
+else:
+    plt.plot(np.linspace(0,n_seconds, 1000),v_thresh*np.ones(1000))   
+v_at_APs = []
+for i in range(len(AP_history)):
+    for j in range(len(firing_times)):
+        if firing_times[j] == AP_history[i]:
+            v_at_APs.append(v_history[j])
+plt.scatter(AP_history, v_at_APs, color = 'red')
