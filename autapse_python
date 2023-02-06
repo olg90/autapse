@@ -399,3 +399,4 @@ for i in range(len(AP_history)):
         if firing_times[j] == AP_history[i]:
             v_at_APs.append(v_history[j])
 plt.scatter(AP_history, v_at_APs, color = 'red')
+plt.show()
