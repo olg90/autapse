@@ -156,7 +156,9 @@ class Neuron():
                     self.vesicle_refill_time = np.random.uniform(8, 14) * (1e-3)
                     refill_ratio = 1 - np.exp(-t_difference / self.vesicle_refill_time)
                     if self.run_test_type == 'n_vesicles_p_probabilities':
-                        refill_ratio = 1
+                        refill_ratio = self.refill_ratio_constant
+                    if self.run_test_type == 'n_vesicles_p_probabilities_2':
+                        refill_ratio = self.refill_ratio
                     vesicles_refilled = np.random.binomial(self.E, refill_ratio)
                     self.vesicle_refill_history.append(vesicles_refilled)
                     self.E -= vesicles_refilled
@@ -381,6 +383,14 @@ def run_test(args, conditions_list):
         
         post_neuron_dict['vesicle_release_probability'] = conditions_list[1]
         post_neuron_dict['M'] = conditions_list[2]
+        post_neuron_dict['refill_ratio_constant'] = conditions_list[3]
+        # Pre or post neuron?
+        
+    if run_test_type == 'n_vesicles_p_probabilities_2':
+        
+        post_neuron_dict['vesicle_release_probability'] = conditions_list[1]
+        post_neuron_dict['M'] = conditions_list[2]
+        post_neuron_dict['refill_ratio'] = conditions_list[3]
         # Pre or post neuron?
 
         
@@ -489,7 +499,8 @@ def run_CV_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
 
 def run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              voltage_update_method, run_test_type, 
-                             release_probability_list, n_vesicles_list):
+                             release_probability_list, n_vesicles_list, 
+                             refill_ratio_constant):
     
     # ------------------------------------------------------------------------
     # Chaning the number of vesicles and the probability of release
@@ -506,16 +517,18 @@ def run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
     
     # Get the no feedback data
     
-    CV_nfb = []
-    for i in range(len(release_probabilities)):
-        CV_nfb_list = []
-        print(i, len(release_probabilities))
-        for j in range(len(n_vesicles_list)):
-            args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type, 
-                        voltage_update_method]    
-            n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
-            CV_nfb_list.append(statistics_nfb[2])
-        CV_nfb.append(CV_nfb_list)
+# =============================================================================
+#     CV_nfb = []
+#     for i in range(len(release_probabilities)):
+#         CV_nfb_list = []
+#         print(i, len(release_probabilities))
+#         for j in range(len(n_vesicles_list)):
+#             args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type, 
+#                         voltage_update_method]    
+#             n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
+#             CV_nfb_list.append(statistics_nfb[2])
+#         CV_nfb.append(CV_nfb_list)
+# =============================================================================
             
     # With feedback test, varying the release probability and the number of vesicles
 
@@ -534,7 +547,8 @@ def run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
                        voltage_update_method]
             
             # Test with feedback
-            conditions_list = [run_test_type, release_probability_value, n_vesicles_value]
+            conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
+                               refill_ratio_constant]
             n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
             CV_fb_list.append(statistics_fb[2])
             
@@ -554,10 +568,156 @@ def run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
 #     
 # =============================================================================
 
-    return CV_nfb, CV_fb
+# =============================================================================
+#     return CV_nfb, CV_fb
+# =============================================================================
+    return CV_fb
+
+def plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, refill_ratio_constant, 
+             plot_number):
+
+    if plot_number == 0:
+        # 3D plots
+        X, Y = np.meshgrid(release_probabilities, n_vesicles_list)
+        Z = np.array(CV3_fb)
+        
+        
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        surf = ax.plot_wireframe(X.T, Y.T, Z, rstride = 1, cstride = 1, cmap='binary')
+        ax.set_xlabel('pr - Probability of vesicle release')
+        ax.set_ylabel('M - Maximum number of vesicles')
+        ax.set_zlabel('$CV_T$ Coefficient of variation');
+        fig.colorbar(surf, shrink = 0.5, aspect = 10, label = '$CV_T$')
+        plt.title('CV as a function of release probability' + \
+                  ' and number of vesicles with refilling rate set to {}'.format(\
+                                                            refill_ratio_constant))
+        plt.show()
+        
+        
+    if plot_number == 1:
+        # 3D plots
+        X, Y = np.meshgrid(release_probabilities, n_vesicles_list)
+        Z = np.array(CV3_fb)
+        
+        
+        fig = plt.figure()
+        ax = plt.axes(projection='3d')
+        surf = ax.plot_surface(X.T, Y.T, Z, rstride = 1, cstride = 1, cmap='rainbow')
+        ax.set_xlabel('pr - Probability of vesicle release')
+        ax.set_ylabel('M - Maximum number of vesicles')
+        ax.set_zlabel('$CV_T$ Coefficient of variation');
+        fig.colorbar(surf, shrink = 0.5, aspect = 10, label = '$CV_T$')
+        plt.title('CV as a function of release probability' + \
+                  ' and number of vesicles with refilling rate set to {}'.format(\
+                                                            refill_ratio_constant))
+        plt.show()
+        
+    if plot_number == 2:
+        # Line plots
+        
+        plt.figure()
+        for i, CV_plot in enumerate(CV3_fb):
+            plt.plot(n_vesicles_list, CV_plot, label = 'pr={}'.format(\
+                                np.around(release_probabilities[i], 2)))
+        plt.legend()
+        plt.xlabel('M - number of vesicles')
+        plt.ylabel('$CV_T$- Coefficient of Variation')
+        plt.title('CV as a function of release probability' + \
+                  ' and number of vesicles with refilling rate set to {}'.format(\
+                                                            refill_ratio_constant))
+        plt.show()
+    
+    if plot_number == 3:
+        # Heat map
+        
+        plt.figure()
+        plt.imshow(np.array(CV3_fb), cmap='hot', interpolation = 'nearest',
+                   extent = [n_vesicles_list[0], n_vesicles_list[-1],
+                             release_probabilities[0], release_probabilities[-1],
+                             ], aspect = 'auto',
+                   origin = 'lower')
+        plt.colorbar(shrink =0.5, aspect = 10, label = '$CV_T$')
+        plt.xlabel('M - maximum number of vesicles')
+        plt.ylabel('pr - Probability of release in feedback')
+        plt.title('CV as a function of release probability' + \
+                  ' and number of vesicles with refilling rate set to {}'.format(\
+                                                            refill_ratio_constant))
+        plt.show()    
+
+
+#########################
+
+def run_CV_test_4(AP_per_second, n_seconds, firing_times, AP_decision_type,
+                             voltage_update_method, run_test_type, 
+                             release_probability_list, n_vesicles_list,
+                             refill_ratio_list):
+    
+    # ------------------------------------------------------------------------
+    # Chaning the number of vesicles and the probability of release
+    # returns a 3D plot with (release_probability, max_number_of_vesicles) on the xy axis.
+    
+    # First plot everything with the refilling rate to be 1, which means the
+    # post neuron is always refilling to full every time.
+    
+    # Then rerun the test with varying levels of pr and n_vesicles and refilling
+    # ratio.
+    
+    # Do it with ramping up and naturally
+    # ------------------------------------------------------------------------
+    
+            
+    # With feedback test, varying the release probability and the number of vesicles
+
+    CV_fb = []
+    
+    for i, refill_ratio_value in enumerate(refill_ratio_list):
+        
+        CV_fb_refill = []
+        
+        print(i, len(refill_ratio_list))
+        
+        for release_probability_value in release_probability_list:
+            
+            CV_fb_list = []
+
+            
+            for n_vesicles_value in n_vesicles_list:
+                # test_type, AP_per_second, n_seconds, firing_times
+        
+                args_fb = ['FB', AP_per_second, n_seconds, firing_times, AP_decision_type,
+                           voltage_update_method]
+                
+                # Test with feedback
+                conditions_list = [run_test_type, release_probability_value, 
+                                   n_vesicles_value, refill_ratio_value]
+                n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
+                CV_fb_list.append(statistics_fb[2])
+                
+            CV_fb_refill.append(CV_fb_list)
+        CV_fb.append(CV_fb_refill)
+        
+# =============================================================================
+#     plt.figure()
+#     
+#     for i,CV_array in enumerate(CV_fb):
+#         plt.plot(voltage_drop_feedback_list, CV_array, 
+#                  label = '$CV_D,noise=${}'.format(np.round(variance_list[i],3)))
+#     plt.plot(voltage_drop_feedback_list, CV_nfb, label = 'Non-feedback', color='k')
+#     plt.xlabel('Value of voltage drop due to AP of autapse')
+#     plt.ylabel('$CV$ of time between action potentials')
+#     plt.legend()
+#     plt.show()
+#     
+# =============================================================================
+
+    return CV_fb
         
 
-def plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, plot_number):
+def plot_CV4(release_probabilities, n_vesicles_list, refill_ratio_list,
+             CV4_fb, plot_number):
+    
+    
 
     if plot_number == 0:
         # 3D plots
@@ -574,7 +734,7 @@ def plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, plot_number):
         ax.set_zlabel('$CV_T$ Coefficient of variation');
         fig.colorbar(surf, shrink = 0.5, aspect = 10, label = '$CV_T$')
         plt.title('CV as a function of release probability' + \
-                  ' and number of vesicles nwith refilling rate set to 1')
+                  ' and number of vesicles with refilling rate set to 1')
         plt.show()
     
     if plot_number == 1:
@@ -588,7 +748,7 @@ def plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, plot_number):
         plt.xlabel('M - number of vesicles')
         plt.ylabel('$CV_T$- Coefficient of Variation')
         plt.title('CV as a function of release probability' + \
-                  ' and number of vesicles nwith refilling rate set to 1')
+                  ' and number of vesicles with refilling rate set to 1')
         plt.show()
     
     if plot_number == 2:
@@ -661,19 +821,101 @@ voltage_drop_feedback_list = np.linspace(0, -2, n_drops)
 # other feedback results?
 # =============================================================================
 
+# CV3 TEST
+
 release_probabilities = np.linspace(0, 1, 20)
-n_vesicles_list = np.arange(10, 100+1)
+n_vesicles_list = np.arange(10, 501,5)
 voltage_update_method = 'vesicle'
 run_test_type = 'n_vesicles_p_probabilities'
+refill_ratio_constant = 1
 
-CV3_nfb, CV3_fb = run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
+CV3_fb = run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              voltage_update_method, run_test_type, release_probabilities, 
-                             n_vesicles_list)
-plot_number = 0
-plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, plot_number)
+                             n_vesicles_list, refill_ratio_constant)
+plot_number = 3
+plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, refill_ratio_constant,
+         plot_number)
+ 
+
+# CV4 Test
+
+# =============================================================================
+# release_probabilities = np.linspace(0, 1, 20)
+# n_vesicles_list = np.arange(10, 100+1)
+# refilling_ratio_list = np.linspace(0,1,20)
+# voltage_update_method = 'vesicle'
+# run_test_type = 'n_vesicles_p_probabilities_2'
+# 
+# CV4_fb = run_CV_test_4(AP_per_second, n_seconds, firing_times, AP_decision_type,
+#                              voltage_update_method, run_test_type, release_probabilities, 
+#                              n_vesicles_list, refilling_ratio_list)
+# 
+# fig = plt.figure()
+# ax = fig.add_subplot(projection='3d')
+# ax.scatter(refilling_ratio_list, release_probabilities, n_vesicles_list)
+# plt.show()
+# 
+# 
+# 
+# import numpy as np
+# import matplotlib.pyplot as plt
+# 
+# # Create example 3D matrix M
+# M = np.array(CV4_fb)
+# 
+# # Reshape M into a 2D array for scatter plot
+# M_2d = M.reshape(-1, 91)
+# 
+# # Create x, y, and z arrays for scatter plot
+# x = np.tile(np.arange(10), 10*91)
+# y = np.repeat(np.arange(10), 10*91)
+# z = np.tile(np.arange(91), 10*10)
+# 
+# # Create color array for scatter plot
+# c = M_2d.flatten()
+# 
+# # Create 3D scatter plot
+# fig = plt.figure()
+# ax = fig.add_subplot(projection='3d')
+# surf = ax.scatter(x, y, z, c=c, cmap='rainbow')
+# 
+# # Set axis labels
+# ax.set_xlabel('Refill ratio')
+# ax.set_ylabel('Release Probability')
+# ax.set_zlabel('M - Max number of vesicles')
+# 
+# fig.colorbar(surf)
+# 
+# # Show plot
+# plt.show()
+# 
+# =============================================================================
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# =============================================================================
+# plot_number = 0
+# plot_CV4(release_probabilities, n_vesicles_list, refilling_ratio_list, CV4_fb, plot_number)
+# 
+# =============================================================================
 
 
 # =============================================================================
