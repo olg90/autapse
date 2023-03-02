@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from pandas import Series
+
 # =============================================================================
 #                               Classes
 # =============================================================================
@@ -135,7 +136,8 @@ class Neuron():
                 n1.vesicle_refill_time = np.random.uniform(8, 14) * (1e-3)
     
                 # Release vesicles
-                vesicles_released = np.random.binomial(n1.M-n1.E, n1.vesicle_release_probability)
+                vesicles_released = np.random.binomial(n1.M-n1.E, 
+                                    n1.vesicle_release_probability)
                 n1.vesicle_release_history.append(vesicles_released)
                 n1.E += vesicles_released
                 n1.E_history.append(n1.E)
@@ -146,7 +148,6 @@ class Neuron():
                 self.v_history.append(self.v_membrane)
                 
                 # Action potential check
-                
                 
                 AP_decision = self.AP_decision_function(self.v_membrane, self.v_thresh)
 #                if self.v_membrane >= self.v_thresh:
@@ -165,7 +166,6 @@ class Neuron():
                     
                     if self.run_test_type == 'vesicle_refill_time':
                         refill_ratio = 1 - np.exp(-t_difference*self.vesicle_refill_time_value)
-                    
                     if self.run_test_type == 'n_vesicles_p_probabilities':
                         refill_ratio = self.refill_ratio_constant
                     if self.run_test_type == 'n_vesicles_p_probabilities_2':
@@ -216,6 +216,8 @@ class Neuron():
                 n1.E_history.append(n1.E)   
                 
                 return t_previous
+            
+
 
 # =============================================================================
 #                               Functions
@@ -414,6 +416,11 @@ def run_test(args, conditions_list):
     if run_test_type == 'vesicle_refill_time':
         post_neuron_dict['vesicle_refill_time_value'] = conditions_list[1]
         post_neuron_dict['M'] = conditions_list[2]
+        
+    if run_test_type == 'mean_threshold_test':
+        post_neuron_dict['vesicle_release_probability'] = conditions_list[1]
+        post_neuron_dict['M'] = conditions_list[2]
+        post_neuron_dict['v_thresh'] = conditions_list[3]
 
         
     n1, n2 = Neuron(pre_neuron_dict), Neuron(post_neuron_dict)
@@ -524,9 +531,9 @@ def run_CV_test_3_nfb(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              release_probability_list, n_vesicles_list, 
                              refill_ratio_constant):
     CV_nfb = []
-    for i in range(len(release_probabilities)):
+    for i in range(len(release_probability_list)):
         CV_nfb_list = []
-        print(i, len(release_probabilities))
+        print(i, len(release_probability_list))
         for j in range(len(n_vesicles_list)):
             args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type, 
                         voltage_update_method]    
@@ -536,7 +543,6 @@ def run_CV_test_3_nfb(AP_per_second, n_seconds, firing_times, AP_decision_type,
     return CV_nfb
     
     
-
 def run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              voltage_update_method, run_test_type, 
                              release_probability_list, n_vesicles_list, 
@@ -604,7 +610,6 @@ def plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, refill_ratio_consta
         X, Y = np.meshgrid(release_probabilities, n_vesicles_list)
         Z = np.array(CV3_fb)
         
-        
         fig = plt.figure()
         ax = plt.axes(projection='3d')
         surf = ax.plot_surface(X.T, Y.T, Z, rstride = 1, cstride = 1, cmap='rainbow')
@@ -652,7 +657,6 @@ def plot_CV3(release_probabilities, n_vesicles_list, CV3_fb, refill_ratio_consta
 def run_CV_test_4(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              voltage_update_method, run_test_type, 
                              vesicle_refill_time_list, n_vesicles_list):
-    
 
     CV_nfb = []
     CV_fb = []
@@ -698,6 +702,46 @@ def plot_heat_CV(data, title_x, data_x, title_y, data_y):
     plt.title('CV as a function of {} and {}'.format(title_x, title_y))
     plt.show()   
  
+def run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
+                voltage_update_method, run_test_type, release_probability_list, 
+                n_vesicles_list, v_threshold_value):
+    
+# Could you also do a comparison where you keep the mean time fixed….
+# so compare a system with no feedback to feedback but lower threshold so
+# mean firing time is same.
+
+    CV_nfb = []
+    CV_fb = []
+
+    for i, release_probability_value in enumerate(release_probability_list):
+
+        CV_nfb_list = []
+        CV_fb_list = []
+
+        print(i, len(release_probability_list))
+
+        for n_vesicles_value in n_vesicles_list:
+            # test_type, AP_per_second, n_seconds, firing_times
+        
+            args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type, 
+                        voltage_update_method]    
+            args_fb = ['FB', AP_per_second, n_seconds, firing_times, AP_decision_type,
+                       voltage_update_method]
+            
+            n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
+            conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
+                               v_threshold_value]
+            
+            n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
+            
+            CV_nfb_list.append(statistics_nfb[2])
+            CV_fb_list.append(statistics_fb[2])
+            
+        CV_nfb.append(CV_nfb_list)
+        CV_fb.append(CV_fb_list)
+        
+    return CV_nfb, CV_fb
+
 
 ##############################################################################
 ##############################################################################
@@ -776,21 +820,81 @@ voltage_drop_feedback_list = np.linspace(0, -2, n_drops)
 # =============================================================================
 
 
-# CV4 Test
+# =============================================================================
+# # CV4 Test
+# 
+# # This is 1 / r, not r.  Simpler to fix this way.
+# vesicle_refill_time_list = np.arange(10,2000,50) 
+# n_vesicles_list = np.arange(10, 501,5)
+# voltage_update_method = 'vesicle'
+# run_test_type = 'vesicle_refill_time'
+# 
+# CV4_nfb, CV4_fb = run_CV_test_4(AP_per_second, n_seconds, firing_times, AP_decision_type,
+#                              voltage_update_method, run_test_type, vesicle_refill_time_list, 
+#                              n_vesicles_list)
+# 
+# CV4_fb_normalized = np.array(CV4_fb) / np.array(CV4_nfb)
+# plot_heat_CV(CV4_fb_normalized, '1 / vesicle refill time', vesicle_refill_time_list,
+#              'number of vesicles', n_vesicles_list)
+# 
+# =============================================================================
 
-# This is 1 / r, not r.  Simpler to fix this way.
-vesicle_refill_time_list = np.arange(10,2000,50) 
-n_vesicles_list = np.arange(10, 501,5)
-voltage_update_method = 'vesicle'
-run_test_type = 'vesicle_refill_time'
+args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type, 
+            voltage_update_method]    
+args_fb = ['FB', AP_per_second, n_seconds, firing_times, AP_decision_type,
+           voltage_update_method]
 
-CV4_nfb, CV4_fb = run_CV_test_4(AP_per_second, n_seconds, firing_times, AP_decision_type,
-                             voltage_update_method, run_test_type, vesicle_refill_time_list, 
-                             n_vesicles_list)
 
-CV4_fb_normalized = np.array(CV4_fb) / np.array(CV4_nfb)
-plot_heat_CV(CV4_fb_normalized, '1 / vesicle refill time', vesicle_refill_time_list,
-             'number of vesicles', n_vesicles_list)
+release_probability_value = 0.9
+n_vesicles_value = 100
+v_threshold_value = -0.25
+run_test_type = 'mean_threshold_test'
+
+n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
+conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
+                   v_threshold_value]
+
+n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
+
+plt.plot(statistics_nfb[0], label='No feedback')
+plt.plot(statistics_fb[0], label = 'Feedback')
+
+plt.plot([], label = 'mean_nfb = {}'.format(np.around(statistics_nfb[1], 3)))
+plt.plot([], label = 'mean_fb = {}'.format(np.around(statistics_fb[1], 3)))
+
+plt.legend()
+plt.show()
+
+plt.figure()
+plt.plot(firing_times, n2_fb.v_history, label = 'fb_v_hist')
+plt.plot(firing_times, n2_nfb.v_history, label = 'nfb_v_hist')
+plt.legend()
+plt.show()
+
+
+
+# =============================================================================
+# #CV5 Test
+# 
+# release_probability_list = np.linspace(0, 1, 20)
+# n_vesicles_list = np.arange(10, 501,5)
+# voltage_update_method = 'vesicle'
+# run_test_type = 'mean_threshold_test'
+# refill_ratio_constant = 0.15 # 0.15 for smaller, 1 for larger
+# v_threshold_value = 0.2 # Value to check so have mean firing time the same
+# 
+# CV5_nfb, CV5_fb = run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
+#                 voltage_update_method, run_test_type, release_probability_list, 
+#                 n_vesicles_list, v_threshold_value)
+# =============================================================================
+
+
+    
+    
+
+
+    
+    
 
 
 
