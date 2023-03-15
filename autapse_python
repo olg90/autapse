@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pandas import Series
 from scipy.optimize import minimize
+from matplotlib import colors
 
 # =============================================================================
 #                               Classes
@@ -26,7 +27,7 @@ class Neuron():
                 vesicles_refilled = np.random.binomial(n1.E, refill_ratio)
                 n1.vesicle_refill_history.append(vesicles_refilled)
                 n1.E -= vesicles_refilled
-                n1.vesicle_refill_time = np.random.uniform(8, 14) * (1e-3)
+
     
                 # Release vesicles
                 vesicles_released = np.random.binomial(n1.M-n1.E, n1.vesicle_release_probability)
@@ -195,7 +196,8 @@ class Neuron():
                         
                 t_previous = t_current
                 return t_previous
-                                          
+               
+            # Cannot fire action potentials, still in the refractory period       
             if update_type == 'recovery':
                 t_difference = t_current - t_previous
                 # Update voltage to be min of 0 and v_membrane when in the refractory period
@@ -216,8 +218,6 @@ class Neuron():
                 
                 return t_previous
             
-
-
 # =============================================================================
 #                               Functions
 # =============================================================================
@@ -259,7 +259,6 @@ def update_voltages(n1, n2, t_current, t_previous, k):
 
     return t_previous
 
-
 def modify_v_history(v_history, firing_times, AP_history, tau, neuron_type = 'NFB'):
     
     #Modify the voltage to make it suitable for plotting
@@ -284,9 +283,9 @@ def modify_v_history(v_history, firing_times, AP_history, tau, neuron_type = 'NF
         
         if t_current in AP_history:
             if neuron_type == 'NFB':
-                drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/(1e-9))
+                drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/(tau))
             if neuron_type == 'FB':
-                drop = (v_history[i] + abs(v_history[i+1]))*np.exp(-(np.linspace(0, t_diff, n_samples))/(1e-9))\
+                drop = (v_history[i] + abs(v_history[i+1]))*np.exp(-(np.linspace(0, t_diff, n_samples))/(tau))\
                     - abs(v_history[i+1])
                 
         else:
@@ -348,7 +347,7 @@ def run_test(args, conditions_list):
                             vesicle_release_probability = 0.8, #0.8
                             #v_thresh = 0.2, 
                             #v_membrane = 0, 
-                            tau = 0.01, #20e-3 = 0.02
+                            tau = 1, #20e-3 = 0.02
                             M = 10, #10, maximum number of vesicles
                             E = 5,#5, number of empty vesicles
                             #refractory_period = 0.001,
@@ -373,7 +372,7 @@ def run_test(args, conditions_list):
                             vesicle_release_probability = 0.8, #0.08
                             v_thresh = 0.2, #0.02
                             v_membrane = 0, # 0
-                            tau = 0.005, # 0.02
+                            tau = 1, # 0.02
                             M = 10, #10
                             E = 5, #5
                             refractory_period = 0.001, #0.001
@@ -434,7 +433,6 @@ def run_test(args, conditions_list):
         post_neuron_dict['v_thresh'] = conditions_list[3]
         post_neuron_dict['refill_ratio_constant'] = conditions_list[4]
 
-        
     n1, n2 = Neuron(pre_neuron_dict), Neuron(post_neuron_dict)
     
     n1, n2 = run_program(n1, n2, firing_times)   
@@ -534,7 +532,6 @@ def run_CV_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
     plt.legend()
     plt.show()
     
-
     return CV_nfb, CV_fb
         
 
@@ -713,6 +710,32 @@ def plot_heat_CV(data, title_x, data_x, title_y, data_y, cmap_color):
     plt.ylabel(title_y)
     plt.title('CV as a function of {} and {}'.format(title_x, title_y))
     plt.show()   
+    
+def find_min(run_test_type, release_probability_value, n_vesicles_value, refill_ratio_constant, 
+             cv_nfb, n_tests):
+    
+    check_interval = [-3, 0.2]
+            
+    v_val_list = np.linspace(check_interval[0], check_interval[1], n_tests)
+    
+    errors = []
+    
+    for v_val in v_val_list:
+        
+        conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
+                           v_val, refill_ratio_constant]
+        
+        n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
+        
+        error = np.abs(cv_nfb - statistics_fb[1])
+        
+        errors.append(error)
+        
+    m = np.argmin(errors)
+    v_min = v_val_list[m]
+    error = np.min(errors)
+    
+    return v_min, np.min(errors)
  
 def run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
                 voltage_update_method, run_test_type, release_probability_list, 
@@ -742,27 +765,27 @@ def run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
             
             n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
             
-            #
-            def f(v_threshold_value, cv_nfb, args_fb, release_probability_value, n_vesicles_value):
+            min_val = find_min(run_test_type, release_probability_value, n_vesicles_value, refill_ratio_constant, 
+                         statistics_nfb[1], n_tests = 10)
             
-                
+            v_threshold_value = min_val[0]
+
+
+            #
+            def f(v_threshold_value, mean_nfb, args_fb, release_probability_value, n_vesicles_value):              
                 conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
-                                   v_threshold_value, refill_ratio_constant]
-                
+                                   v_threshold_value, refill_ratio_constant]                 
                 n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
+                mean_fb = statistics_fb[1] 
+                mean_error = np.abs(mean_fb - mean_nfb)
                 
-                cv_nfb = cv_nfb
-                cv_fb = statistics_fb[2]
-                
-                cv_error = np.abs(cv_nfb - cv_fb)
-                
-                return cv_error
+                return mean_error
             #
                 
-            res = minimize(f, v_threshold_value, args = (statistics_nfb[2], args_fb, 
-                            release_probability_value, n_vesicles_value), method = 'BFGS')
+            res = minimize(f, v_threshold_value, args = (statistics_nfb[1], args_fb, 
+                            release_probability_value, n_vesicles_value), method = 'BFGS',
+                           tol = 1e-6)
             v_threshold_value = res.x[0] 
-            print(v_threshold_value)
 
             conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
                                v_threshold_value, refill_ratio_constant]
@@ -808,9 +831,9 @@ def run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
 
 test_type = 'FB'  #'FB' for feedback, 'NFB' for non-feedback
 AP_per_second = 300 #300
-n_seconds = 3  #60 seconds/min * 60 minutes = 3600 seconds
-#firing_times = generate_poisson_times(AP_per_second, n_seconds)
-firing_times = np.linspace(0.1, 0.5, 50)
+n_seconds = 1  #60 seconds/min * 60 minutes = 3600 seconds
+firing_times = generate_poisson_times(AP_per_second, n_seconds)
+#firing_times = np.linspace(0.1, 0.5, 50)
 AP_decision_type = 'step' #'step' or 'sigmoid'
 voltage_update_method = 'vesicle' # vesicle, constant, vesicle_drop
 
@@ -821,12 +844,13 @@ args_fb = ['FB', AP_per_second, n_seconds, firing_times, AP_decision_type,
            voltage_update_method]
 
 release_probability_value = 0.9
-n_vesicles_value = 100
-v_threshold_value = 0 #-1.57
+n_vesicles_value = 10
+v_threshold_value = 0.2 #-1.57, #0.13
+
 run_test_type = 'mean_threshold_test'
 refill_ratio_constant = 1
-
 n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
+
 conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
                    v_threshold_value, refill_ratio_constant]
 
@@ -842,9 +866,9 @@ ax[0].plot([], [], ' ',  label = 'mean_fb = {}'.format(np.around(statistics_fb[1
 ax[0].legend()
 ax[0].set_title('Plot of time between action potentials of downstream neuron')
 
-
 ax[1].plot(firing_times, n2_fb.v_history, label = 'fb_v_hist', color = 'blue')
 ax[1].plot(firing_times, n2_nfb.v_history, label = 'nfb_v_hist', color = 'black')
+
 ax[1].plot(np.linspace(0,n_seconds, 1000), 0.2*np.ones(1000), label = 'vth', color = 'green')
 ax[1].plot(np.linspace(0,n_seconds, 1000), v_threshold_value*np.ones(1000), 
            label = 'vth_fb', color = 'orange')
@@ -855,8 +879,10 @@ ax[1].set_title('Plots of voltage histories with their thresholds')
 v_drop_nfb, t_drop_nfb = modify_v_history(n2_nfb.v_history, firing_times, n2_nfb.AP_history, n2_nfb.tau)
 v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, neuron_type = 'FB')
 
-ax[1].plot(t_drop_fb, v_drop_fb)
-ax[1].plot(t_drop_nfb, v_drop_nfb)
+# =============================================================================
+# ax[1].plot(t_drop_fb, v_drop_fb)
+# ax[1].plot(t_drop_nfb, v_drop_nfb)
+# =============================================================================
 
 plt.show()
 
@@ -874,48 +900,107 @@ plt.show()
 
 #CV6 Test
 
-# =============================================================================
-# AP_per_second = 300 #300
-# n_seconds = 1 #60 seconds/min * 60 minutes = 3600 seconds
-# firing_times = generate_poisson_times(AP_per_second, n_seconds)
-# AP_decision_type = 'step' #'step' or 'sigmoid'
-# 
-# release_probability_list = np.linspace(0, 1, 40)
-# n_vesicles_list = np.arange(10, 501,5)
-# voltage_update_method = 'vesicle'
-# run_test_type = 'mean_threshold_test'
-# #refill_ratio_constant = 0.1 # 0.15 for smaller, 1 for larger
-# v_threshold_value = 0 # Value to check so have mean firing time the same
-# 
-# refill_ratio_constants = [0.5]
-# #refill_ratio_constants = [0.1, 0.2, 0.5]
-# 
-# CV_plots = run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
-#                 voltage_update_method, run_test_type, release_probability_list, 
-#                 n_vesicles_list, v_threshold_value, refill_ratio_constants)
-# 
-# CV_plot = CV_plots[0]
-# 
-# #Plot the test
-# 
-# CV_plot_scaled = (CV_plot - np.min(CV_plot))*(2-0)/(np.max(CV_plot) - np.min(CV_plot)) + 0
-# 
-# cmap_color = 'seismic'
-# plt.figure()
-# plt.imshow(CV_plot, cmap = cmap_color, interpolation = 'nearest', origin = 'lower',
-#            vmin = 0, vmax = 2,
-#             extent = [n_vesicles_list[0], n_vesicles_list[-1],
-#                       release_probability_list[0], release_probability_list[-1],
-#                       ], aspect = 'auto',
-#            label = 'Normalized CV_T')
-# 
-# cbar = plt.colorbar()
-# cbar.set_label('Attenuateing                             Amplifying')
-# plt.title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[0]) + \
-#               '\nBlue is attenuation of noise, red is amplification of noise')
-# plt.xlabel('Maximum number of vesicle docking sites in autapse neuron')
-# plt.ylabel('Probaility of releasing vesicles in the autapse')
-# plt.show()
-# =============================================================================
+AP_per_second = 300 #300
+n_seconds = 1 #60 seconds/min * 60 minutes = 3600 seconds
+firing_times = generate_poisson_times(AP_per_second, n_seconds)
+AP_decision_type = 'step' #'step' or 'sigmoid'
+
+release_probability_list = np.linspace(0, 1, 40)
+n_vesicles_list = np.arange(10, 501,5)
+voltage_update_method = 'vesicle'
+run_test_type = 'mean_threshold_test'
+#refill_ratio_constant = 0.1 # 0.15 for smaller, 1 for larger
+v_threshold_value = 0.2 # Value to check so have mean firing time the same
+
+refill_ratio_constants = [0.5]
+
+CV_plots = run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
+                voltage_update_method, run_test_type, release_probability_list, 
+                n_vesicles_list, v_threshold_value, refill_ratio_constants)
+
+CV_plot = CV_plots[0]
+
+plt.imshow(CV_plot, origin = 'lower', interpolation = 'nearest', cmap = 'hot')
+plt.colorbar()
+plt.show()
+
+#Plot the test
+
+CV_plot_scaled = (CV_plot - np.min(CV_plot))*(2-0)/(np.max(CV_plot) - np.min(CV_plot)) + 0
+
+cmap_color = 'seismic' #'seismic'
+plt.figure()
+
+v_max = np.max(CV_plot)
+plt.imshow(CV_plot, cmap = cmap_color, interpolation = 'nearest', origin = 'lower',
+           vmin = -v_max + 2, vmax = v_max,
+            extent = [n_vesicles_list[0], n_vesicles_list[-1],
+                      release_probability_list[0], release_probability_list[-1],
+                      ], aspect = 'auto',
+           label = 'Normalized CV_T')
+
+cbar = plt.colorbar()
+cbar.set_label('Attenuateing                             Amplifying')
+plt.title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[0]) + \
+              '\nBlue is attenuation of noise, red is amplification of noise')
+plt.xlabel('Maximum number of vesicle docking sites in autapse neuron')
+plt.ylabel('Probaility of releasing vesicles in the autapse')
+plt.show()
+
+#
 
 
+#####################
+
+
+
+n_attenuating = 4
+n_amplifying = 4
+delta_x_L = 0.05
+delta_x_R = 0.01
+
+max_val = np.max(CV_plot)
+min_val = np.min(CV_plot)
+
+attenuating_colors = [(1-1/(i+1), 1- 1/(i+1), 1) for i in range(n_attenuating+1)]
+amplifying_colors = [(1, 1-(i+1)/(n_amplifying+1), 1-(i+1)/(n_amplifying+1)) for i in range(n_amplifying+1)]
+
+attenuating_levels = list(np.linspace(min_val, 1-delta_x_L, n_attenuating+1))
+amplifying_levels = list(np.linspace(1+delta_x_R, max_val, n_amplifying+1))
+
+white_color = ['white']
+
+colors_list_full = attenuating_colors + white_color + amplifying_colors
+levels_list_full = attenuating_levels + amplifying_levels
+
+cmap = colors.ListedColormap(colors_list_full)
+
+fig, ax = plt.subplots()
+norm = colors.BoundaryNorm(levels_list_full, cmap.N)
+im = ax.contourf(CV_plot, levels=levels_list_full, cmap=cmap, extend = 'both', norm = norm)
+
+ax.set_title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[0]) + \
+              '\nBlue is attenuation of noise, red is amplification of noise', size = 18)
+    
+ax.set_xlabel('Maximum number of vesicle docking sites in autapse neuron', size = 18)
+ax.set_ylabel('Probaility of releasing vesicles in the autapse', size = 18)
+
+cbar = fig.colorbar(im)
+#cbar.ax.set_yticklabels([0, 1, 2])
+labels_list = [str(np.around(x,2)) for x in levels_list_full]
+#cbar.ax.set_yticklabels(labels_list)
+cbar.ax.set_yticklabels([])
+cbar.set_label('Attenuating        (1)          Amplifying', size = 18)
+cbar.ax.tick_params(size=0)
+
+plt.show()
+####################
+
+# =============================================================================
+# CV_plot, cmap=cmap_color, interpolation = 'nearest',
+#                             vmin = v_min, vmax = v_max,
+#        extent = [n_vesicles_list[0], n_vesicles_list[-1],
+#                  release_probability_list[0], release_probability_list[-1],
+#                  ], aspect = 'auto',
+#        origin = 'lower'
+# =============================================================================
