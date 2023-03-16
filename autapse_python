@@ -191,6 +191,7 @@ class Neuron():
                         
                     if self.test_type == 'FB':                
                         self.v_membrane = -self.v_coeff*vesicles_released
+                        self.overshot_history.append([t_current, self.v_membrane])
                     if self.test_type == 'NFB':
                         self.v_membrane = 0  
                         
@@ -259,7 +260,8 @@ def update_voltages(n1, n2, t_current, t_previous, k):
 
     return t_previous
 
-def modify_v_history(v_history, firing_times, AP_history, tau, neuron_type = 'NFB'):
+def modify_v_history(v_history, firing_times, AP_history, tau, neuron_type = 'NFB', 
+                     overshot_history = 'None'):
     
     #Modify the voltage to make it suitable for plotting
 
@@ -283,11 +285,16 @@ def modify_v_history(v_history, firing_times, AP_history, tau, neuron_type = 'NF
         
         if t_current in AP_history:
             if neuron_type == 'NFB':
-                drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/(tau))
+                drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/(1e-9))
             if neuron_type == 'FB':
-                drop = (v_history[i] + abs(v_history[i+1]))*np.exp(-(np.linspace(0, t_diff, n_samples))/(tau))\
-                    - abs(v_history[i+1])
                 
+                t_diff_AP = 1e-6
+                overshot_value = overshot_history[overshot_history[:, 0] == t_current][0][1]
+                drop_1 = (v_history[i] + np.abs(overshot_value))*np.exp(-(np.linspace(0, t_diff_AP, 
+                                                n_samples//10))/(1e-9)) - np.abs(overshot_value)
+                drop_2 = (overshot_value)*np.exp(-(np.linspace(0, t_diff-t_diff_AP, 9*n_samples//10))/(1e-1))
+                drop = np.concatenate([drop_1, drop_2])
+
         else:
             if neuron_type == 'NFB':
                 drop = v_history[i]*np.exp(-(np.linspace(0, t_diff, n_samples))/tau)
@@ -387,6 +394,7 @@ def run_test(args, conditions_list):
                             vesicle_refill_history = [],
                             v_history = [],
                             AP_history = [],
+                            overshot_history = [],
                             voltage_update_method = voltage_update_method, 
                             AP_decision_type = AP_decision_type,
                             AP_noise = 'None',
@@ -534,7 +542,6 @@ def run_CV_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
     
     return CV_nfb, CV_fb
         
-
 def run_CV_test_3_nfb(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              voltage_update_method, run_test_type, 
                              release_probability_list, n_vesicles_list, 
@@ -550,7 +557,6 @@ def run_CV_test_3_nfb(AP_per_second, n_seconds, firing_times, AP_decision_type,
             CV_nfb_list.append(statistics_nfb[2])
         CV_nfb.append(CV_nfb_list)
     return CV_nfb
-    
     
 def run_CV_test_3(AP_per_second, n_seconds, firing_times, AP_decision_type,
                              voltage_update_method, run_test_type, 
@@ -747,6 +753,7 @@ def run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
 
     CV_nfb = []
     CV_fb = []
+    v_threshold_value_init = v_threshold_value
 
     for i, release_probability_value in enumerate(release_probability_list):
 
@@ -765,11 +772,13 @@ def run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
             
             n1_nfb, n2_nfb, statistics_nfb = run_test(args_nfb, ['None'])
             
-            min_val = find_min(run_test_type, release_probability_value, n_vesicles_value, refill_ratio_constant, 
-                         statistics_nfb[1], n_tests = 10)
-            
-            v_threshold_value = min_val[0]
+# =============================================================================
+#             min_val = find_min(run_test_type, release_probability_value, n_vesicles_value, refill_ratio_constant, 
+#                          statistics_nfb[1], n_tests = 3)
+#             v_threshold_value = min_val[0]
+# =============================================================================
 
+            v_threshold_value = v_threshold_value_init
 
             #
             def f(v_threshold_value, mean_nfb, args_fb, release_probability_value, n_vesicles_value):              
@@ -783,7 +792,7 @@ def run_CV5_test(AP_per_second, n_seconds, firing_times, AP_decision_type,
             #
                 
             res = minimize(f, v_threshold_value, args = (statistics_nfb[1], args_fb, 
-                            release_probability_value, n_vesicles_value), method = 'BFGS',
+                            release_probability_value, n_vesicles_value), method = 'Nelder-Mead',
                            tol = 1e-6)
             v_threshold_value = res.x[0] 
 
@@ -877,7 +886,9 @@ ax[1].set_title('Plots of voltage histories with their thresholds')
 
 
 v_drop_nfb, t_drop_nfb = modify_v_history(n2_nfb.v_history, firing_times, n2_nfb.AP_history, n2_nfb.tau)
-v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, neuron_type = 'FB')
+v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, 
+                                        neuron_type = 'FB', 
+                                        overshot_history = np.array(n2_fb.overshot_history))
 
 # =============================================================================
 # ax[1].plot(t_drop_fb, v_drop_fb)
@@ -910,57 +921,59 @@ n_vesicles_list = np.arange(10, 501,5)
 voltage_update_method = 'vesicle'
 run_test_type = 'mean_threshold_test'
 #refill_ratio_constant = 0.1 # 0.15 for smaller, 1 for larger
-v_threshold_value = 0.2 # Value to check so have mean firing time the same
+v_threshold_value = 0 # Value to check so have mean firing time the same
 
-refill_ratio_constants = [0.5]
+refill_ratio_constants = [0.1, 0.3, 0.5, 0.7,0.8, 0.1]
 
 CV_plots = run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
                 voltage_update_method, run_test_type, release_probability_list, 
                 n_vesicles_list, v_threshold_value, refill_ratio_constants)
 
-CV_plot = CV_plots[0]
 
-plt.imshow(CV_plot, origin = 'lower', interpolation = 'nearest', cmap = 'hot')
-plt.colorbar()
-plt.show()
+
+plot_number = 5
+CV_plot = CV_plots[plot_number]
 
 #Plot the test
 
-CV_plot_scaled = (CV_plot - np.min(CV_plot))*(2-0)/(np.max(CV_plot) - np.min(CV_plot)) + 0
+#CV_plot_scaled = (CV_plot - np.min(CV_plot))*(2-0)/(np.max(CV_plot) - np.min(CV_plot)) + 0
 
-cmap_color = 'seismic' #'seismic'
-plt.figure()
-
-v_max = np.max(CV_plot)
-plt.imshow(CV_plot, cmap = cmap_color, interpolation = 'nearest', origin = 'lower',
-           vmin = -v_max + 2, vmax = v_max,
-            extent = [n_vesicles_list[0], n_vesicles_list[-1],
-                      release_probability_list[0], release_probability_list[-1],
-                      ], aspect = 'auto',
-           label = 'Normalized CV_T')
-
-cbar = plt.colorbar()
-cbar.set_label('Attenuateing                             Amplifying')
-plt.title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[0]) + \
-              '\nBlue is attenuation of noise, red is amplification of noise')
-plt.xlabel('Maximum number of vesicle docking sites in autapse neuron')
-plt.ylabel('Probaility of releasing vesicles in the autapse')
-plt.show()
+# =============================================================================
+# cmap_color = 'seismic' #'seismic'
+# plt.figure()
+# 
+# v_max = np.max(CV_plots)
+# plt.imshow(CV_plot, cmap = cmap_color, interpolation = 'nearest', origin = 'lower',
+#            vmin = -v_max + 2, vmax = v_max,
+#             extent = [n_vesicles_list[0], n_vesicles_list[-1],
+#                       release_probability_list[0], release_probability_list[-1],
+#                       ], aspect = 'auto',
+#            label = 'Normalized CV_T')
+# 
+# cbar = plt.colorbar()
+# cbar.set_label('Attenuateing                             Amplifying')
+# plt.title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[plot_number]) + \
+#               '\nBlue is attenuation of noise, red is amplification of noise')
+# plt.xlabel('Maximum number of vesicle docking sites in autapse neuron')
+# plt.ylabel('Probaility of releasing vesicles in the autapse')
+# plt.show()
+# =============================================================================
 
 #
 
 
 #####################
 
+plot_number = 0
+CV_plot = CV_plots[plot_number]
 
-
-n_attenuating = 4
-n_amplifying = 4
+n_attenuating = 5
+n_amplifying = 5
 delta_x_L = 0.05
 delta_x_R = 0.01
 
-max_val = np.max(CV_plot)
-min_val = np.min(CV_plot)
+max_val = np.max(CV_plots)
+min_val = np.min(CV_plots)
 
 attenuating_colors = [(1-1/(i+1), 1- 1/(i+1), 1) for i in range(n_attenuating+1)]
 amplifying_colors = [(1, 1-(i+1)/(n_amplifying+1), 1-(i+1)/(n_amplifying+1)) for i in range(n_amplifying+1)]
@@ -977,14 +990,17 @@ cmap = colors.ListedColormap(colors_list_full)
 
 fig, ax = plt.subplots()
 norm = colors.BoundaryNorm(levels_list_full, cmap.N)
-im = ax.contourf(CV_plot, levels=levels_list_full, cmap=cmap, extend = 'both', norm = norm)
+im = ax.contourf(CV_plot, levels=levels_list_full, cmap=cmap, extend = 'both', norm = norm, 
+                 extent = [n_vesicles_list[0], n_vesicles_list[-1],
+                           release_probability_list[0], release_probability_list[-1],
+                           ])
 
-ax.set_title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[0]) + \
+ax.set_title('Normalized CV with with <$T$> = <$T_F$> and autapse vesicle refill probability = {}'.format(refill_ratio_constants[plot_number]) + \
               '\nBlue is attenuation of noise, red is amplification of noise', size = 18)
     
 ax.set_xlabel('Maximum number of vesicle docking sites in autapse neuron', size = 18)
 ax.set_ylabel('Probaility of releasing vesicles in the autapse', size = 18)
-
+              
 cbar = fig.colorbar(im)
 #cbar.ax.set_yticklabels([0, 1, 2])
 labels_list = [str(np.around(x,2)) for x in levels_list_full]
@@ -996,11 +1012,3 @@ cbar.ax.tick_params(size=0)
 plt.show()
 ####################
 
-# =============================================================================
-# CV_plot, cmap=cmap_color, interpolation = 'nearest',
-#                             vmin = v_min, vmax = v_max,
-#        extent = [n_vesicles_list[0], n_vesicles_list[-1],
-#                  release_probability_list[0], release_probability_list[-1],
-#                  ], aspect = 'auto',
-#        origin = 'lower'
-# =============================================================================
