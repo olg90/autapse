@@ -814,11 +814,12 @@ def run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
 
 test_type = 'FB'  #'FB' for feedback, 'NFB' for non-feedback
 AP_per_second = 300 #300
-n_seconds = 60   #60 seconds/min * 60 minutes = 3600 seconds
+n_seconds = 1   #60 seconds/min * 60 minutes = 3600 seconds
 firing_times = generate_poisson_times(AP_per_second, n_seconds)
 #firing_times = np.linspace(0.1, 0.5, 50)
 AP_decision_type = 'step' #'step' or 'sigmoid'
 voltage_update_method = 'vesicle' # vesicle, constant, vesicle_drop
+font_size = 20
 
 # Check the plots manually
 args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type, 
@@ -859,8 +860,12 @@ v_threshold_value = res.x[0]
 n1_fb, n2_fb, statistics_fb = params_list[np.argmin(error_list_f_min)]
 
 
-n1_nfb, n2_nfb, n1_fb, n2_fb, statistic_nfb, statistic_fb = np.load('hist_nfb12_fb12_stat1_stat2.npy', 
+directory = r'C:\Users\olive\OneDrive\Desktop\PhD\Research\Neuron'
+os.chdir(directory)
+
+n1_nfb, n2_nfb, n1_fb, n2_fb, statistics_nfb, statistics_fb = np.load('hist_nfb12_fb12_stat1_stat2.npy', 
                                                                     allow_pickle = True)
+
 
 # =============================================================================
 # conditions_list = [run_test_type, release_probability_value, n_vesicles_value,
@@ -869,78 +874,54 @@ n1_nfb, n2_nfb, n1_fb, n2_fb, statistic_nfb, statistic_fb = np.load('hist_nfb12_
 # n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
 # 
 # =============================================================================
-# =============================================================================
-# fig, ax = plt.subplots(2,1)
-# 
-# v_drop_nfb, t_drop_nfb = modify_v_history(n2_nfb.v_history, firing_times, n2_nfb.AP_history, n2_nfb.tau)
-# v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, 
-#                                         neuron_type = 'FB', 
-#                                         overshot_history = np.array(n2_fb.overshot_history))
-# 
-# mean_nfb = statistics_nfb[1]
-# mean_fb = statistics_fb[1]
-# 
-# max_length = 5000
-# v_drop_nfb = v_drop_nfb[:max_length]
-# t_drop_nfb = t_drop_nfb[:max_length]
-# v_drop_fb = v_drop_fb[:max_length]
-# t_drop_fb = t_drop_fb[:max_length]
-# 
-# t_drop_fb = t_drop_fb / mean_fb
-# t_drop_nfb = t_drop_nfb / mean_nfb
-# 
-# ax[1].plot(t_drop_fb, v_drop_fb, color = 'blue')
-# ax[1].plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
-# 
-# ax[0].plot(t_drop_nfb, v_drop_nfb, color = 'black')
-# ax[0].plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
-# 
-# # =============================================================================
-# # ax[0].plot([], [], label = 'Mean = {}'.format(np.around(mean_fb, 3)))
-# # ax[1].plot([], [], label ='Mean = {}'.format(np.around(mean_nfb, 3)))
-# # =============================================================================
-# 
-# # =============================================================================
-# # ax[0].legend(loc = 'upper right')
-# # ax[1].legend(loc = 'upper right')
-# # =============================================================================
-# 
-# ax[0].set_ylabel('Nonfeedback', size = 20)
-# ax[1].set_ylabel('Feedback', size = 20)
-# 
-# label_size = 15
-# label_size_x = 20
-# ax[0].set_xticks([])
-# ax[0].tick_params(labelsize = label_size)
-# ax[1].tick_params(axis = 'y', labelsize = label_size)
-# ax[1].tick_params(axis = 'x', labelsize = label_size_x)
-# plt.show()
-# 
-# =============================================================================
+fig, ax = plt.subplots(2,1)
 
-# =============================================================================
-# fig, ax = plt.subplots(3,1)
-# ax[0].set_title('V_history')
-# ax[0].plot(firing_times, n2_nfb.v_history, color = 'black', label = 'V nfb')
-# ax[0].plot(firing_times, n2_fb.v_history, color = 'blue', label = 'V fb')
-# ax[0].legend()
-# ax[1].set_title('Inter-AP times')
-# ax[1].plot(statistics_nfb[0], label = 'nfb', color = 'black')
-# ax[1].plot(statistics_fb[0], label = 'fb', color = 'blue')
-# ax[1].legend()
-# plt.show()
-# 
-# n_bins = 20
-# 
-# ax[2].set_title('Histograms of times between action potentials of feedback and nonfeedback neuron')
-# ax[2].hist(statistics_nfb[0], bins = n_bins, label = 'Nfb')
-# ax[2].hist(statistics_fb[0], bins = n_bins, label = 'Fb')
-# ax[2].plot([], [], label = 'Mean nfb {}'.format(np.around(statistics_nfb[1]),6))
-# ax[2].plot([], [], label = 'Mean fb {}'.format(np.around(statistics_fb[1]), 6))
-# ax[2].legend()
-# plt.show()
-# =============================================================================
+v_drop_nfb, t_drop_nfb = modify_v_history(n2_nfb.v_history, firing_times, n2_nfb.AP_history, n2_nfb.tau)
+v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, 
+                                        neuron_type = 'FB', 
+                                        overshot_history = np.array(n2_fb.overshot_history))
 
+mean_nfb = statistics_nfb[1]
+mean_fb = statistics_fb[1]
+
+max_length = 5000//2
+v_drop_nfb = v_drop_nfb[:max_length]
+t_drop_nfb = t_drop_nfb[:max_length]
+v_drop_fb = v_drop_fb[:max_length]
+t_drop_fb = t_drop_fb[:max_length]
+
+t_drop_fb = t_drop_fb / mean_fb
+t_drop_nfb = t_drop_nfb / mean_nfb
+
+ax[1].plot(t_drop_fb, v_drop_fb, color = 'blue')
+ax[1].plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
+
+ax[0].plot(t_drop_nfb, v_drop_nfb, color = 'black')
+ax[0].plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
+
+ax[0].set_ylabel('Nonfeedback', size = 20)
+ax[1].set_ylabel('Feedback', size = 20)
+
+label_size = font_size
+label_size_x = font_size
+ax[0].set_xticks([])
+ax[0].tick_params(labelsize = label_size)
+ax[1].tick_params(axis = 'y', labelsize = font_size)
+ax[1].tick_params(axis = 'x', labelsize = font_size)
+
+plt.subplots_adjust(top=0.99,
+bottom=0.045,
+left=0.065,
+right=0.99,
+hspace=0.13,
+wspace=0.2)
+
+plt.show()
+
+
+
+
+###############################################################################
 n_bins = 20
 
 plt.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback')
@@ -950,7 +931,6 @@ round_to_number = 3
 nfb_val = np.around(statistics_nfb[1], round_to_number)
 fb_val = np.around(statistics_fb[1], round_to_number)
 
-font_size = 20
 plt.xticks(size=font_size)
 plt.yticks(size=font_size)
 
@@ -960,6 +940,50 @@ font = font_manager.FontProperties(family='Arial',
                                    size=font_size)
 
 plt.legend(prop=font)
+plt.show()
+
+###############################################################################
+
+#Plot together
+
+fig, ax1 = plt.subplots()
+
+n_bins = 20
+
+ax1.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback')
+ax1.hist(statistics_fb[0], bins = n_bins, label = 'Autaptic feedback')
+
+round_to_number = 3
+nfb_val = np.around(statistics_nfb[1], round_to_number)
+fb_val = np.around(statistics_fb[1], round_to_number)
+font = font_manager.FontProperties(family='Arial', style='normal', size=font_size)
+ax1.legend(prop=font)
+
+ax1.tick_params(labelsize = font_size)
+left_position = 0.55
+width_size = 0.33
+
+left, bottom, width, height = [left_position, 0.2, width_size, 0.25]
+ax3 = fig.add_axes([left, bottom, width, height])
+
+ax3.plot(t_drop_nfb, v_drop_nfb)
+ax3.plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
+ax3.tick_params(labelsize = font_size)
+ax3.set_title('    No feedback', loc = 'left', size = font_size)
+ax3.set_xlabel('Time', size = font_size)
+
+ax3.set_ylabel('Voltage', size = font_size)
+
+left, bottom, width, height = [left_position, 0.5, width_size, 0.25]
+ax2 = fig.add_axes([left, bottom, width, height])
+ax2.plot(t_drop_fb, v_drop_fb, color = 'orange')
+ax2.plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
+ax2.set_ylabel('Voltage', size = font_size)
+
+ax2.tick_params(labelsize = font_size)
+ax2.set_xticks([])
+ax2.set_title('    Autaptic feedback', loc = 'left', size = font_size)
+
 plt.show()
 
 ###############################################################################
@@ -985,6 +1009,7 @@ refill_ratio_constants = [0.1, 0.3, 0.5, 0.7,0.8, 1]
 
 plot_number = 0
 
+CV_plots = np.load('CV_plots.npy')
 
 CV_plot = CV_plots[plot_number]
 
@@ -1010,10 +1035,6 @@ levels_list_full = attenuating_levels + amplifying_levels
 cmap = colors.ListedColormap(colors_list_full)
 good_plots = [CV_plots[0], CV_plots[1], CV_plots[2], CV_plots[5]]
 good_refill_ratios = [refill_ratio_constants[i] for i in [0,1,2,5]]
-
-matplotlib exported values how can I use these?
-
-
 
 fig, ax = plt.subplots(1,4)
 norm = colors.BoundaryNorm(levels_list_full, cmap.N)
