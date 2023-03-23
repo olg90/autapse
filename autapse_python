@@ -5,6 +5,7 @@ from scipy.optimize import minimize
 from matplotlib import colors
 import matplotlib.font_manager as font_manager
 import os
+from scipy.stats import lognorm, gamma
 
 # =============================================================================
 #                               Classes
@@ -815,7 +816,7 @@ def run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
 
 test_type = 'FB'  #'FB' for feedback, 'NFB' for non-feedback
 AP_per_second = 300 #300
-n_seconds = 10   #60 seconds/min * 60 minutes = 3600 seconds
+n_seconds = 20   #60 seconds/min * 60 minutes = 3600 seconds
 firing_times = generate_poisson_times(AP_per_second, n_seconds)
 #firing_times = np.linspace(0.1, 0.5, 50)
 AP_decision_type = 'step' #'step' or 'sigmoid'
@@ -975,11 +976,23 @@ t_drop_fb = t_drop_fb[start:stop]
 t_drop_fb = t_drop_fb / mean_fb
 t_drop_nfb = t_drop_nfb / mean_nfb
 
+n_bins = 40
 
-n_bins = 20
+shape_nfb,loc_nfb,scale_nfb = gamma.fit(statistics_nfb[0])
+shape_fb,loc_fb,scale_fb = gamma.fit(statistics_fb[0])
 
-ax1.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback')
-ax1.hist(statistics_fb[0], bins = n_bins, label = 'Autaptic feedback')
+x_nfb = np.linspace(0,np.max(statistics_nfb[0]), len(statistics_nfb[0]))
+x_fb = np.linspace(0,np.max(statistics_fb[0]), len(statistics_fb[0]))
+pdf_nfb = gamma.pdf(x_nfb, shape_nfb, loc_nfb, scale_nfb)
+pdf_fb = gamma.pdf(x_fb, shape_fb, loc_fb, scale_fb)
+
+nonfeedback_color = 'blue'
+feedback_color = 'orange'
+
+ax1.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback', density = True)
+ax1.hist(statistics_fb[0], bins = n_bins, label = 'Autaptic feedback', density = True, alpha = 0.60)
+ax1.plot(x_nfb, pdf_nfb, nonfeedback_color)
+ax1.plot(x_fb, pdf_fb, feedback_color)
 ax1.set_ylabel('Number of Inter-AP times', size = font_size)
 ax1.set_xlabel('Time', size = font_size)
 
@@ -1017,6 +1030,40 @@ ax3.tick_params(labelsize = font_size)
 ax3.set_title('    Autaptic feedback', loc = 'left', size = font_size)
 
 plt.show()
+
+#
+fig, axx = plt.subplots(1,2)
+
+
+axx[0].hist(statistics_nfb[0], bins = n_bins, density = True, color ='blue')
+axx[1].hist(statistics_fb[0], bins = n_bins, density = True, color = 'orange')
+axx[0].plot(x_nfb, pdf_nfb, 'black')
+axx[1].plot(x_fb, pdf_fb, 'black')
+fig.suptitle('Gamma histogram fits', size = font_size)
+
+axx[0].set_title('No feedback', size = font_size)
+axx[1].set_title('Autaptic feedback', size = font_size)
+
+m1 = np.max(statistics_nfb[0])
+m2 = np.max(statistics_fb[0])
+max_len = np.max((m1, m2))
+
+axx[0].set_xlim(0, max_len)
+axx[1].set_xlim(0, max_len)
+axx[0].plot([], [], ' ', label = 'Shape = {}\nloc = {}\nscale = {}'.format(\
+                                np.around(shape_nfb,3),np.around(loc_nfb,3),np.around(scale_nfb,3)))
+axx[1].plot([], [], ' ', label = 'Shape = {}\nloc = {}\nscale = {}'.format(\
+                                np.around(shape_fb,3),np.around(loc_fb,3),np.around(scale_fb,3)))
+
+axx[0].tick_params(labelsize = font_size)
+axx[1].tick_params(labelsize = font_size)    
+axx[1].set_yticks([])
+    
+axx[0].legend(prop = font)
+axx[1].legend(prop = font)
+
+plt.show()
+#
 
 ###############################################################################
 
@@ -1103,5 +1150,7 @@ plt.show()
 # plt.show()
 # ####################
 # =============================================================================
+
+
 
 
