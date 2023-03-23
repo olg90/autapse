@@ -4,6 +4,7 @@ from pandas import Series
 from scipy.optimize import minimize
 from matplotlib import colors
 import matplotlib.font_manager as font_manager
+import os
 
 # =============================================================================
 #                               Classes
@@ -352,15 +353,15 @@ def run_test(args, conditions_list):
                             #n_seconds = n_seconds, 
                             #firing_times = firing_times,
                             v_coeff = 0.02, #0.02
-                            vesicle_release_probability = 0.8, #0.8
+                            vesicle_release_probability = 0.3, #0.8
                             #v_thresh = 0.2, 
                             #v_membrane = 0, 
                             tau = 1, #20e-3 = 0.02
-                            M = 10, #10, maximum number of vesicles
+                            M = 70, #10 original, 100 changed, maximum number of vesicles, drop for better results
                             E = 5,#5, number of empty vesicles
                             #refractory_period = 0.001,
                             #outside_of_refractory_period = True,
-                            vesicle_refill_time = 8*(1e-3), 
+                            vesicle_refill_time = 50*(1e-3), #8e-3 original = r = 1/k
                             voltage_addition = 0.01, #for constant
                             #fired_recently = False,
                             #previous_AP_time = -np.inf,
@@ -814,7 +815,7 @@ def run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
 
 test_type = 'FB'  #'FB' for feedback, 'NFB' for non-feedback
 AP_per_second = 300 #300
-n_seconds = 1   #60 seconds/min * 60 minutes = 3600 seconds
+n_seconds = 10   #60 seconds/min * 60 minutes = 3600 seconds
 firing_times = generate_poisson_times(AP_per_second, n_seconds)
 #firing_times = np.linspace(0.1, 0.5, 50)
 AP_decision_type = 'step' #'step' or 'sigmoid'
@@ -827,9 +828,9 @@ args_nfb = ['NFB', AP_per_second, n_seconds, firing_times, AP_decision_type,
 args_fb = ['FB', AP_per_second, n_seconds, firing_times, AP_decision_type,
            voltage_update_method]
 
-release_probability_value = 0.9
-n_vesicles_value = 100
-v_threshold_value = 0.15 #-1.57, #0.13
+release_probability_value = 0.6
+n_vesicles_value = 200
+v_threshold_value = 0.2 #-1.57, #0.13
 refill_ratio_constant = 1
 
 
@@ -860,11 +861,15 @@ v_threshold_value = res.x[0]
 n1_fb, n2_fb, statistics_fb = params_list[np.argmin(error_list_f_min)]
 
 
-directory = r'C:\Users\olive\OneDrive\Desktop\PhD\Research\Neuron'
-os.chdir(directory)
-
-n1_nfb, n2_nfb, n1_fb, n2_fb, statistics_nfb, statistics_fb = np.load('hist_nfb12_fb12_stat1_stat2.npy', 
-                                                                    allow_pickle = True)
+# =============================================================================
+# directory = r'C:\Users\olive\OneDrive\Desktop\PhD\Research\Neuron'
+# os.chdir(directory)
+# 
+# =============================================================================
+# =============================================================================
+# n1_nfb, n2_nfb, n1_fb, n2_fb, statistics_nfb, statistics_fb = np.load('hist_nfb12_fb12_stat1_stat2.npy', 
+#                                                                     allow_pickle = True)
+# =============================================================================
 
 
 # =============================================================================
@@ -874,7 +879,83 @@ n1_nfb, n2_nfb, n1_fb, n2_fb, statistics_nfb, statistics_fb = np.load('hist_nfb1
 # n1_fb, n2_fb, statistics_fb = run_test(args_fb, conditions_list)
 # 
 # =============================================================================
-fig, ax = plt.subplots(2,1)
+# =============================================================================
+# fig, ax = plt.subplots(2,1)
+# 
+# v_drop_nfb, t_drop_nfb = modify_v_history(n2_nfb.v_history, firing_times, n2_nfb.AP_history, n2_nfb.tau)
+# v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, 
+#                                         neuron_type = 'FB', 
+#                                         overshot_history = np.array(n2_fb.overshot_history))
+# 
+# mean_nfb = statistics_nfb[1]
+# mean_fb = statistics_fb[1]
+# 
+# max_length = 5000//2
+# v_drop_nfb = v_drop_nfb[:max_length]
+# t_drop_nfb = t_drop_nfb[:max_length]
+# v_drop_fb = v_drop_fb[:max_length]
+# t_drop_fb = t_drop_fb[:max_length]
+# 
+# t_drop_fb = t_drop_fb / mean_fb
+# t_drop_nfb = t_drop_nfb / mean_nfb
+# 
+# ax[1].plot(t_drop_fb, v_drop_fb, color = 'blue')
+# ax[1].plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
+# 
+# ax[0].plot(t_drop_nfb, v_drop_nfb, color = 'black')
+# ax[0].plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
+# 
+# ax[0].set_ylabel('Nonfeedback', size = 20)
+# ax[1].set_ylabel('Feedback', size = 20)
+# 
+# label_size = font_size
+# label_size_x = font_size
+# ax[0].set_xticks([])
+# ax[0].tick_params(labelsize = label_size)
+# ax[1].tick_params(axis = 'y', labelsize = font_size)
+# ax[1].tick_params(axis = 'x', labelsize = font_size)
+# 
+# plt.subplots_adjust(top=0.99,
+# bottom=0.045,
+# left=0.065,
+# right=0.99,
+# hspace=0.13,
+# wspace=0.2)
+# 
+# plt.show()
+# =============================================================================
+
+
+
+
+###############################################################################
+# =============================================================================
+# n_bins = 20
+# 
+# plt.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback')
+# plt.hist(statistics_fb[0], bins = n_bins, label = 'Autaptic feedback')
+# 
+# round_to_number = 3
+# nfb_val = np.around(statistics_nfb[1], round_to_number)
+# fb_val = np.around(statistics_fb[1], round_to_number)
+# 
+# plt.xticks(size=font_size)
+# plt.yticks(size=font_size)
+# 
+# font = font_manager.FontProperties(family='Arial',
+# #                                   weight='bold',
+#                                    style='normal', 
+#                                    size=font_size)
+# 
+# plt.legend(prop=font)
+# plt.show()
+# =============================================================================
+
+###############################################################################
+
+#Plot together
+
+fig, ax1 = plt.subplots()
 
 v_drop_nfb, t_drop_nfb = modify_v_history(n2_nfb.v_history, firing_times, n2_nfb.AP_history, n2_nfb.tau)
 v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_history, n2_fb.tau, 
@@ -884,74 +965,23 @@ v_drop_fb, t_drop_fb = modify_v_history(n2_fb.v_history, firing_times, n2_fb.AP_
 mean_nfb = statistics_nfb[1]
 mean_fb = statistics_fb[1]
 
-max_length = 5000//2
-v_drop_nfb = v_drop_nfb[:max_length]
-t_drop_nfb = t_drop_nfb[:max_length]
-v_drop_fb = v_drop_fb[:max_length]
-t_drop_fb = t_drop_fb[:max_length]
+start = 0
+stop = start + 2500
+v_drop_nfb = v_drop_nfb[start:stop]
+t_drop_nfb = t_drop_nfb[start:stop]
+v_drop_fb = v_drop_fb[start:stop]
+t_drop_fb = t_drop_fb[start:stop]
 
 t_drop_fb = t_drop_fb / mean_fb
 t_drop_nfb = t_drop_nfb / mean_nfb
 
-ax[1].plot(t_drop_fb, v_drop_fb, color = 'blue')
-ax[1].plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
-
-ax[0].plot(t_drop_nfb, v_drop_nfb, color = 'black')
-ax[0].plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
-
-ax[0].set_ylabel('Nonfeedback', size = 20)
-ax[1].set_ylabel('Feedback', size = 20)
-
-label_size = font_size
-label_size_x = font_size
-ax[0].set_xticks([])
-ax[0].tick_params(labelsize = label_size)
-ax[1].tick_params(axis = 'y', labelsize = font_size)
-ax[1].tick_params(axis = 'x', labelsize = font_size)
-
-plt.subplots_adjust(top=0.99,
-bottom=0.045,
-left=0.065,
-right=0.99,
-hspace=0.13,
-wspace=0.2)
-
-plt.show()
-
-
-
-
-###############################################################################
-n_bins = 20
-
-plt.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback')
-plt.hist(statistics_fb[0], bins = n_bins, label = 'Autaptic feedback')
-
-round_to_number = 3
-nfb_val = np.around(statistics_nfb[1], round_to_number)
-fb_val = np.around(statistics_fb[1], round_to_number)
-
-plt.xticks(size=font_size)
-plt.yticks(size=font_size)
-
-font = font_manager.FontProperties(family='Arial',
-#                                   weight='bold',
-                                   style='normal', 
-                                   size=font_size)
-
-plt.legend(prop=font)
-plt.show()
-
-###############################################################################
-
-#Plot together
-
-fig, ax1 = plt.subplots()
 
 n_bins = 20
 
 ax1.hist(statistics_nfb[0], bins = n_bins, label = 'No feedback')
 ax1.hist(statistics_fb[0], bins = n_bins, label = 'Autaptic feedback')
+ax1.set_ylabel('Number of Inter-AP times', size = font_size)
+ax1.set_xlabel('Time', size = font_size)
 
 round_to_number = 3
 nfb_val = np.around(statistics_nfb[1], round_to_number)
@@ -960,29 +990,31 @@ font = font_manager.FontProperties(family='Arial', style='normal', size=font_siz
 ax1.legend(prop=font)
 
 ax1.tick_params(labelsize = font_size)
-left_position = 0.55
+left_position = 0.6
 width_size = 0.33
-
-left, bottom, width, height = [left_position, 0.2, width_size, 0.25]
-ax3 = fig.add_axes([left, bottom, width, height])
-
-ax3.plot(t_drop_nfb, v_drop_nfb)
-ax3.plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
-ax3.tick_params(labelsize = font_size)
-ax3.set_title('    No feedback', loc = 'left', size = font_size)
-ax3.set_xlabel('Time', size = font_size)
-
-ax3.set_ylabel('Voltage', size = font_size)
 
 left, bottom, width, height = [left_position, 0.5, width_size, 0.25]
 ax2 = fig.add_axes([left, bottom, width, height])
-ax2.plot(t_drop_fb, v_drop_fb, color = 'orange')
-ax2.plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
+
+ax2.plot(t_drop_nfb, v_drop_nfb)
+ax2.plot(t_drop_nfb, n2_nfb.v_thresh*np.ones(len(t_drop_nfb)), color = 'green')
+ax2.tick_params(labelsize = font_size)
+ax2.set_title('    No feedback', loc = 'left', size = font_size)
+
+ax2.set_xticks([])
 ax2.set_ylabel('Voltage', size = font_size)
 
-ax2.tick_params(labelsize = font_size)
-ax2.set_xticks([])
-ax2.set_title('    Autaptic feedback', loc = 'left', size = font_size)
+
+left, bottom, width, height = [left_position, 0.2, width_size, 0.25]
+ax3 = fig.add_axes([left, bottom, width, height])
+ax3.plot(t_drop_fb, v_drop_fb, color = 'orange')
+ax3.plot(t_drop_fb, v_threshold_value*np.ones(len(t_drop_fb)), color = 'green')
+ax3.set_ylabel('Voltage', size = font_size)
+ax3.set_xlabel('Time', size = font_size)
+
+ax3.tick_params(labelsize = font_size)
+
+ax3.set_title('    Autaptic feedback', loc = 'left', size = font_size)
 
 plt.show()
 
@@ -990,88 +1022,86 @@ plt.show()
 
 #CV6 Test
 
-AP_per_second = 300 #300
-n_seconds = 1 #60 seconds/min * 60 minutes = 3600 seconds
-firing_times = generate_poisson_times(AP_per_second, n_seconds)
-AP_decision_type = 'step' #'step' or 'sigmoid'
-
-release_probability_list = np.linspace(0, 1, 40)
-n_vesicles_list = np.arange(10, 501,5)
-voltage_update_method = 'vesicle'
-run_test_type = 'mean_threshold_test'
-#refill_ratio_constant = 0.1 # 0.15 for smaller, 1 for larger
-v_threshold_value = 0 # Value to check so have mean firing time the same
-
-refill_ratio_constants = [0.1, 0.3, 0.5, 0.7,0.8, 1]
-
-
-#####################
-
-plot_number = 0
-
-CV_plots = np.load('CV_plots.npy')
-
-CV_plot = CV_plots[plot_number]
-
-n_attenuating = 5
-n_amplifying = 5
-delta_x_L = 0.05
-delta_x_R = 0.01
-
-max_val = np.max(CV_plots)
-min_val = np.min(CV_plots)
-
-attenuating_colors = [(1-1/(i+1), 1- 1/(i+1), 1) for i in range(n_attenuating+1)]
-amplifying_colors = [(1, 1-(i+1)/(n_amplifying+1), 1-(i+1)/(n_amplifying+1)) for i in range(n_amplifying+1)]
-
-attenuating_levels = list(np.linspace(min_val, 1-delta_x_L, n_attenuating+1))
-amplifying_levels = list(np.linspace(1+delta_x_R, max_val, n_amplifying+1))
-
-white_color = ['white']
-
-colors_list_full = attenuating_colors + white_color + amplifying_colors
-levels_list_full = attenuating_levels + amplifying_levels
-
-cmap = colors.ListedColormap(colors_list_full)
-good_plots = [CV_plots[0], CV_plots[1], CV_plots[2], CV_plots[5]]
-good_refill_ratios = [refill_ratio_constants[i] for i in [0,1,2,5]]
-
-fig, ax = plt.subplots(1,4)
-norm = colors.BoundaryNorm(levels_list_full, cmap.N)
-
-for i in range(len(good_plots)):
-    im = ax[i].contourf(good_plots[i], levels=levels_list_full, cmap=cmap, extend = 'both', norm = norm, 
-                     extent = [n_vesicles_list[0], n_vesicles_list[-1],
-                               release_probability_list[0], release_probability_list[-1],
-                               ])
-    
-    ax[i].set_title('Pr(refill vesicle)= {}'.format(good_refill_ratios[i]), size = font_size)
-    ax[i].tick_params(labelsize = font_size)
-
-    if i != 0:
-        ax[i].set_yticks([])
-    if i == 0:
-        ax[i].set_ylabel('Vesicle release probaility', size = font_size)
-    if i == 1:
-        ax[i].set_xlabel('                      Maximum number of docking sites', size = font_size)
-        
-    if i == len(good_plots)-1:
-        cbar = fig.colorbar(im)
-        #cbar.ax.set_yticklabels([0, 1, 2]) 
-        labels_list = [str(np.around(x,2)) for x in levels_list_full]
-        #cbar.ax.set_yticklabels(labels_list)
-        cbar.ax.set_yticklabels([])
-        cbar.set_label('Attenuating (1) Amplifying', size = font_size)
-        cbar.ax.tick_params(size=0)
-        
-plt.subplots_adjust(top=0.93,
-bottom=0.15,
-left=0.06,
-right=0.99,
-hspace=0.2,
-wspace=0.055)
-
-plt.show()
-####################
+# =============================================================================
+# AP_per_second = 300 #300
+# n_seconds = 1 #60 seconds/min * 60 minutes = 3600 seconds
+# firing_times = generate_poisson_times(AP_per_second, n_seconds)
+# AP_decision_type = 'step' #'step' or 'sigmoid'
+# 
+# release_probability_list = np.linspace(0, 1, 40) #0, 1, 40
+# n_vesicles_list = np.arange(10, 501,5)  #10, 501, 5
+# voltage_update_method = 'vesicle'
+# run_test_type = 'mean_threshold_test'
+# #refill_ratio_constant = 0.1 # 0.15 for smaller, 1 for larger
+# v_threshold_value = 0 # Value to check so have mean firing time the same
+# 
+# refill_ratio_constants = [0.1, 0.3, 0.5, 1]
+# 
+# CV_plots = run_CV5_test_2(AP_per_second, n_seconds, firing_times, AP_decision_type,
+#                 voltage_update_method, run_test_type, release_probability_list, 
+#                 n_vesicles_list, v_threshold_value, refill_ratio_constants)
+# 
+# #####################
+# 
+# n_attenuating = 5
+# n_amplifying = 5
+# delta_x_L = 0.05
+# delta_x_R = 0.01
+# 
+# max_val = np.max(CV_plots)
+# min_val = np.min(CV_plots)
+# 
+# attenuating_colors = [(1-1/(i+1), 1- 1/(i+1), 1) for i in range(n_attenuating+1)]
+# amplifying_colors = [(1, 1-(i+1)/(n_amplifying+1), 1-(i+1)/(n_amplifying+1)) for i in range(n_amplifying+1)]
+# 
+# attenuating_levels = list(np.linspace(min_val, 1-delta_x_L, n_attenuating+1))
+# amplifying_levels = list(np.linspace(1+delta_x_R, max_val, n_amplifying+1))
+# 
+# white_color = ['white']
+# 
+# colors_list_full = attenuating_colors + white_color + amplifying_colors
+# levels_list_full = attenuating_levels + amplifying_levels
+# 
+# cmap = colors.ListedColormap(colors_list_full)
+# 
+# 
+# fig, ax = plt.subplots(1,4)
+# norm = colors.BoundaryNorm(levels_list_full, cmap.N)
+# 
+# for i in range(len(CV_plots)):
+#     im = ax[i].contourf(CV_plots[i], levels=levels_list_full, cmap=cmap, extend = 'both', norm = norm, 
+#                      extent = [n_vesicles_list[0], n_vesicles_list[-1],
+#                                release_probability_list[0], release_probability_list[-1],
+#                                ])
+#     
+#     ax[i].set_title('Pr(refill vesicle)= {}'.format(refill_ratio_constants[i]), size = font_size)
+#     ax[i].tick_params(labelsize = font_size)
+# 
+#     if i != 0:
+#         ax[i].set_yticks([])
+#     if i == 0:
+#         ax[i].set_ylabel('Vesicle release probaility', size = font_size)
+#     if i == 1:
+#         ax[i].set_xlabel('                      Maximum number of docking sites', size = font_size)
+#         
+#     if i == len(CV_plots)-1:
+#         cbar = fig.colorbar(im)
+#         #cbar.ax.set_yticklabels([0, 1, 2]) 
+#         labels_list = [str(np.around(x,2)) for x in levels_list_full]
+#         #cbar.ax.set_yticklabels(labels_list)
+#         cbar.ax.set_yticklabels([])
+#         cbar.set_label('Attenuating (1) Amplifying', size = font_size)
+#         cbar.ax.tick_params(size=0)
+#         
+# plt.subplots_adjust(top=0.93,
+# bottom=0.15,
+# left=0.06,
+# right=0.99,
+# hspace=0.2,
+# wspace=0.055)
+# 
+# plt.show()
+# ####################
+# =============================================================================
 
 
