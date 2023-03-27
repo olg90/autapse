@@ -1,0 +1,380 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def add_exp_time(AP_rate = 300):
+    return np.random.exponential( 1./AP_rate)
+
+
+
+def to_dict(**x):
+    return x
+
+def get_events(previous_time, current_time, membrane_voltage, vth, delay_timers, refractory_period_timer, parameters_dict):
+    
+    delay_time = parameters_dict['delay_time']
+    refractory_period = parameters_dict['refractory_period']
+    v_coeff = parameters_dict['v_coeff']
+    refractory_period = parameters_dict['refractory_period']
+    delta_t = parameters_dict['delta_t']
+    
+    
+    if (len(delay_timers) == 0) and (refractory_period_timer == 'None'):
+        if membrane_voltage < vth:
+            return 'no RP or timers', [current_time + add_exp_time()]
+        else:            
+            return 'AP fired', [0, refractory_period, current_time + delta_t]
+
+        
+    if (refractory_period_timer != 'None') and (len(delay_timers) != 0):
+        
+        # Delay timers less than the refractory period timer
+        expired_timers = []
+        expire_times = []
+        expire_drop_values = []
+        for i, delay_timer in enumerate(delay_timers):
+            if delay_timer[0] < refractory_period_timer:
+                expired_timers.append(i)
+                expire_times.append(delay_timer[0])
+                expire_drop_values.append(delay_timer[1])
+                
+                
+        unexpired_delay_timers = [delay_timers[i] for i in range(len(delay_timers)) if i not in expired_timers]
+        updated_delay_timers = []
+        if len(expire_times) != 0:
+            for j, delay_timer in enumerate(unexpired_delay_timers):
+                updated_delay_timers[j] = [delay_timer[0] - expire_times[-1], delay_timer[1]]
+        else:
+            updated_delay_timers = unexpired_delay_timers
+            
+        unexpired_delay_timers = updated_delay_timers
+                        
+        if len(expire_times) != 0:
+            updated_refractory_period_timer = refractory_period_timer - expire_times[-1]
+        else:
+            updated_refractory_period_timer = refractory_period_timer
+            
+        
+        # Expend the refractory period time
+        
+        next_time = current_time + updated_refractory_period_timer
+        updated_delay_timers_post_refractory_period = []
+        
+        for ii, delay_timer in enumerate(updated_delay_timers):
+            updated_delay_timers_post_refractory_period.append([delay_timer[0] - updated_refractory_period_timer, delay_timer[1]])
+        
+        delay_timers_AP = []
+        for kk, delay_timer in enumerate(updated_delay_timers_post_refractory_period):
+            if delay_timer[0] == 0:
+                delay_timers_AP.append(delay_timer)
+                
+        final_timers = [x for x in updated_delay_timers_post_refractory_period if (x[0] != 0)]          
+                
+        voltage_times = [current_time + delay_timer[i][0] for i in range(len(delay_timers_AP))]
+        voltage_drops = [delay_timer[i][1] for i in range(len(delay_timers_AP))]
+        
+        refractory_period_timer = 'None'
+        
+        return_1 = [expire_times, expire_drop_values, updated_refractory_period_timer]
+        return_2 = [voltage_times, voltage_drops, final_timers, refractory_period_timer, next_time]
+        
+        return 'post AP delays and refractory period', [return_1, return_2]
+    
+    if ((refractory_period_timer == 'None') and (len(delay_timers) != 0)) and (membrane_voltage < vth):
+        add_time = add_exp_time()
+        next_AP_time = current_time + add_time
+        
+        delay_timers_before_AP_time = []
+        delay_timers_after_AP_time = []
+        for delay_timer in delay_timers:
+            if delay_timer[0] < add_time:
+                delay_timers_before_AP_time.append(delay_timer)
+            else:
+                delay_timers_after_AP_time.append(delay_timer)
+                
+        drop_times = []
+        drop_values = []
+        for delay_timer in delay_timers_before_AP_time:
+            drop_times.append(current_time + delay_timer[0])
+            drop_values.append(delay_timer[1])
+            
+        updated_delay_timers = []
+        for delay_timer in delay_timers_after_AP_time:
+            updated_delay_timers.append([current_time + delay_timer[0] - next_AP_time, delay_timer[1]])
+            
+        return 'no RP, have timers, under vth', [drop_times, drop_values, updated_delay_timers, 
+                                                 v_coeff, next_AP_time]
+            
+    ################ Here below fix
+    if ((refractory_period_timer == 'None') and (len(delay_timers) != 0)) and (membrane_voltage >= vth):
+        
+        drop_0_time = current_time + delta_t
+        drop_0_value = 0
+        
+        add_time = add_exp_time()
+        
+        next_AP_time = drop_0_time + add_time
+        
+        delay_timers_before_AP_time = []
+        delay_timers_after_AP_time = []
+        for delay_timer in delay_timers:
+            if delay_timer[0] < add_time:
+                delay_timers_before_AP_time.append(delay_timer)
+            else:
+                delay_timers_after_AP_time.append(delay_timer)
+                
+        drop_times = []
+        drop_values = []
+        for delay_timer in delay_timers_before_AP_time:
+            drop_times.append(delay_timer[0])
+            drop_values.append(delay_timer[1])
+            
+        updated_delay_timers = []
+        for delay_timer in delay_timers_after_AP_time:
+            updated_delay_timers.append([delay_timer[0] - add_time, delay_timer[1]])
+            
+        # Add another timer because of AP firing
+        updated_delay_timers.append([delay_time, -1])
+        
+        return 'no RP, have timers, over vth', [drop_0_time, drop_0_value, drop_times, drop_values, 
+                                                updated_delay_timers, v_coeff, next_AP_time]
+     
+AP_rate = 300
+end_time = 1
+membrane_voltage = 0
+vth = 0.2
+delay_time = 0.1 #################
+refractory_period = 0.001
+v_coeff = 0.01
+delta_t = 1e-9
+
+M_u = 70
+M_d = 10
+
+E_u = 5
+E_d = 10
+
+p_u = 0.2
+p_d = 0.2
+
+c_u = 0.02
+c_d = 0.02
+
+r_u = 50e-3
+r_d = 8e-3
+
+tau_d = 0.01
+
+parameters_dict = to_dict(vth = vth,
+                     delay_time = delay_time,
+                     refractory_period = refractory_period,
+                     v_coeff = v_coeff,
+                     delta_t = delta_t)
+
+previous_time = 0
+current_time = 0
+
+delay_timers = []
+refractory_period_timer = 'None'
+
+v_history = []
+times_list = []
+AP_times_list = []
+firing_times = []
+
+while current_time < end_time:
+    event_type, events = get_events(previous_time, current_time, membrane_voltage, vth, delay_timers, 
+                                    refractory_period_timer, parameters_dict)
+    if event_type == 'no RP or timers':
+        
+        
+
+        previous_time = current_time
+        current_time = events[0]
+        
+        #
+        
+        t_difference = current_time - previous_time
+        # Refill vesicles
+        refill_ratio = 1 - np.exp(-t_difference / r_u)
+        vesicles_refilled = np.random.binomial(E_u, refill_ratio)
+        E_u -= vesicles_refilled
+        
+        # Release vesicles
+        b_u = np.random.binomial(M_u-E_u, p_u) # Number released
+        E_u += b_u
+        
+        # Update the voltage 
+        reduction = np.exp(-(t_difference)/tau_d)
+        voltage_addition = c_u*b_u
+        membrane_voltage = membrane_voltage*reduction + voltage_addition
+        
+        #       
+        
+        v_history.append(membrane_voltage)
+        times_list.append(current_time)
+        firing_times.append(current_time)
+
+   
+    if event_type == 'AP fired':
+        
+        membrane_voltage = events[0]
+        v_history.append(membrane_voltage)
+        
+        
+        # 
+        # Refill and release some number of downstream vesicles
+        
+        t_difference = current_time - previous_time
+        # Refill vesicles
+        R_d = 1 - np.exp(-t_difference / r_d)
+        vesicles_refilled = np.random.binomial(E_d, R_d)
+        E_d -= vesicles_refilled
+        
+        # Release vesicles
+        b_d = np.random.binomial(M_d-E_d, p_d) # Number released
+        E_d += b_d
+        #        
+        
+          
+        previous_time = current_time
+        current_time = events[2]
+        
+        times_list.append(current_time)
+        firing_times.append(current_time)
+        AP_times_list.append(current_time)        
+        refractory_period_timer = events[1]
+    
+        print(-c_d*b_d)
+        delay_timers.append([delay_time, -c_d*b_d])
+        
+        
+
+        
+        
+
+        
+
+    if event_type == 'post AP delays and refractory period':
+          
+        expire_times = events[0][0]
+        expire_drop_values = events[0][1]
+        previous_time = current_time
+        current_time = events[1][4]
+       
+        for i in range(len(expire_times)):
+            #ADDED RECENTLY
+            membrane_voltage = expire_drop_values[i]
+            v_history.append(expire_drop_values[i])
+            times_list.append(current_time + expire_times[i])   
+
+        updated_refractory_period_timer = events[0][2]
+        
+        voltage_times = events[1][0]
+        voltage_drops = events[1][1]
+        
+        for i,v_drop in enumerate(voltage_drops):
+            membrane_voltage += v_drop
+            v_history.append(membrane_voltage)
+            times_list.append(voltage_times[i])
+        
+        delay_timers = events[1][2]
+        refractory_period_timer = events[1][3]
+        
+    if event_type == 'no RP, have timers, under vth':
+        
+        drop_times = events[0]
+        drop_values = events[1]
+        delay_timers = events[2]
+        next_time = events[4]
+        
+        for i, drop_time in enumerate(drop_times):
+            membrane_voltage += drop_values[i]
+            v_history.append(membrane_voltage)
+            times_list.append(drop_time)
+        
+        membrane_voltage += events[3]
+        v_history.append(membrane_voltage)
+        previous_time = current_time
+        current_time = next_time
+        times_list.append(current_time)
+        
+    if event_type == 'no RP, have timers, over vth':
+        
+        drop_0_time = events[0]
+        drop_0_value = events[1]
+        
+        membrane_voltage = drop_0_value
+        v_history.append(membrane_voltage)
+        times_list.append(drop_0_time)
+        
+        drop_times = events[2]
+        drop_values = events[3]
+        delay_timers = events[4]
+        voltage_additon = events[5]
+        
+        
+        for i, drop_time in enumerate(drop_times):           
+            membrane_voltage += drop_values[i]
+            v_history.append(membrane_voltage)
+            times_list.append(drop_0_time)
+            
+        previous_time = current_time
+        current_time = events[6]
+        membrane_voltage += v_coeff
+        v_history.append(membrane_voltage)
+        times_list.append(current_time)
+        
+
+plt.plot(times_list, v_history)
+plt.plot(times_list, vth * np.ones(len(times_list)))
+
+
+###############################################################################
+
+# =============================================================================
+# 
+# # Refill vesicles
+# refill_ratio = 1 - np.exp(-t_difference / n1.vesicle_refill_time)
+# vesicles_refilled = np.random.binomial(n1.E, refill_ratio)
+# n1.vesicle_refill_history.append(vesicles_refilled)
+# n1.E -= vesicles_refilled
+# 
+# # Release vesicles
+# vesicles_released = np.random.binomial(n1.M-n1.E, 
+#                     n1.vesicle_release_probability)
+# n1.vesicle_release_history.append(vesicles_released)
+# n1.E += vesicles_released
+# n1.E_history.append(n1.E)
+# 
+# # Change the voltage
+# reduction = np.exp(-(t_difference)/self.tau)
+# voltage_addition = n1.v_coeff*vesicles_released
+# #self.v_membrane = self.v_membrane*reduction + voltage_addition
+# 
+# 
+# vesicles_refilled = np.random.binomial(self.E, refill_ratio)
+# self.vesicle_refill_history.append(vesicles_refilled)
+# self.E -= vesicles_refilled
+# 
+# # Release vesicles
+# vesicles_released = np.random.binomial(self.M-self.E, 
+#                     self.vesicle_release_probability)
+# self.vesicle_release_history.append(vesicles_released)
+# self.E += vesicles_released
+# self.E_history.append(self.E)
+#  
+# self.fired_recently = True
+# self.outside_of_refractory_period = False
+# self.previous_AP_time = t_current
+# self.AP_history.append(t_current)                
+#     
+# if self.run_test_type != 'mean_threshold_test_delay':
+#     if self.test_type == 'FB':                
+#         self.v_membrane = -self.v_coeff*vesicles_released
+#         self.overshot_history.append([t_current, self.v_membrane])
+#     if self.test_type == 'NFB':
+#         self.v_membrane = 0  
+# else:
+#     self.v_membrane = 0
+# =============================================================================
