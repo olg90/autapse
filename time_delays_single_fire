@@ -1,0 +1,196 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def add_exp_time(AP_rate = 300):
+    return np.random.exponential( 1./AP_rate)
+
+
+def get_inter_AP_times(end_time, delay_time, vth):
+    
+    end_time = end_time
+    delay_time = delay_time
+    vth = vth
+    
+
+    previous_time = 0
+    current_time = 0
+    
+    membrane_voltage = 0
+
+    delta_t = 1e-20
+    
+    t_prev_vesc_rel_d = 0
+    t_curr_vesc_rel_d = 0
+    
+    M_u = 70
+    M_d = 1000
+    
+    E_u = 5
+    E_d = 5
+    
+    p_u = 0.3
+    p_d = 0.6
+    
+    c_u = 0.02
+    c_d = 0.003
+    
+    r_u = 50e-3
+    r_d = 8e-3
+    
+    tau_d = 0.01
+    
+    delay_timer = 'None'
+    
+    v_history = []
+    times_list = []
+    AP_history = []
+    
+    b_d = 0
+    b_u = 0
+    
+    
+    while current_time < end_time:
+#        print(current_time / end_time)
+    
+        previous_time = current_time
+        add_time = add_exp_time()
+        next_AP_time = current_time + add_time
+        
+        if delay_timer != 'None':
+            
+            if delay_timer <= add_time:
+                time_of_delay = current_time + delay_timer
+                membrane_voltage = -c_d*M_d #-c_d*b_d
+                v_history.append(membrane_voltage)
+                times_list.append(time_of_delay)
+                if delay_timer == add_time:
+                    print('c')
+                delay_timer = 'None'
+            else:
+                delay_timer = delay_timer - add_time
+
+        current_time = next_AP_time
+            
+        #
+        t_difference = current_time - previous_time
+        # Refill vesicles
+        refill_ratio = 1 - np.exp(-t_difference / r_u)
+        vesicles_refilled = np.random.binomial(E_u, refill_ratio)
+        E_u -= vesicles_refilled
+    
+        # Release vesicles
+        b_u = np.random.binomial(M_u-E_u, p_u) # Number released
+        E_u += b_u
+    
+        # Update the voltage 
+        reduction = np.exp(-(t_difference)/tau_d)
+        voltage_addition = c_u*b_u
+        membrane_voltage = membrane_voltage*reduction + voltage_addition        
+        #
+
+        v_history.append(membrane_voltage)
+        times_list.append(current_time)
+        
+        if membrane_voltage >= vth:
+
+
+            if delay_timer != 'None':
+                delay_timer = delay_timer - delta_t
+            if delay_timer == 'None':
+                delay_timer = delay_time        
+                
+   
+                
+            t_curr_vesc_rel_d = current_time
+            t_diff_vesc = t_curr_vesc_rel_d - t_prev_vesc_rel_d
+            refill_ratio = 1 - np.exp(-t_diff_vesc / r_d) 
+            vesicles_refilled = np.random.binomial(E_d, refill_ratio)
+            E_d -= vesicles_refilled
+            
+            b_d = np.random.binomial(M_d-E_d, p_d)
+            E_d += b_d
+            t_prev_vesc_rel_d = current_time
+            
+            membrane_voltage = 0
+            v_history.append(membrane_voltage)
+            times_list.append(current_time + delta_t)
+            AP_history.append(current_time)
+            current_time = current_time + delta_t
+            
+            
+    inter_AP_times = np.diff(AP_history)          
+            
+
+
+    return inter_AP_times, times_list, v_history, vth
+
+
+###############################################################################
+
+end_time = 60
+delay_time0 = 0
+delay_no_feedback = np.inf
+
+inter_no_feedback, t_no_feedback, v_no_feedback, vth_no_feedback = get_inter_AP_times(end_time, 
+                                                                delay_no_feedback, vth = 0.2)
+inter_delay_0, t0, v0, vth0 = get_inter_AP_times(end_time, delay_time0, vth = 0.2)
+
+mean_nfb = np.mean(inter_no_feedback)
+mean_delay_0 = np.mean(inter_delay_0)
+
+
+delay_time2 = 0.005
+inter2, t2, v2, vth2 = get_inter_AP_times(end_time, delay_time2, 0.2)
+
+fig, ax = plt.subplots(3,1)
+ax[0].plot(t_no_feedback, v_no_feedback, label = 'No Feedback')
+ax[0].plot(t_no_feedback, vth_no_feedback*np.ones(len(t_no_feedback)))
+ax[0].legend()
+ax[1].plot(t0, v0, label = 'No delay')
+ax[1].plot(t0, vth0*np.ones(len(t0)))
+ax[1].legend()
+ax[2].plot(t2, v2, label = 'Delay = {}'.format(delay_time2))
+ax[2].plot(t2, vth2*np.ones(len(t2)))
+ax[2].legend()
+
+plt.show()
+
+
+#
+percentages = [0,0.01,0.1, 0.2, 0.4, 1, 10, 60]
+
+inters = []
+ts = []
+vs = []
+vths = []
+for i in range(len(percentages)):
+    inter, t, v, vth = get_inter_AP_times(end_time, percentages[i]*mean_delay_0, vth = 0.2)
+    inters.append(inter)
+    ts.append(t)
+    vs.append(v)
+    vths.append(vth)
+    
+max0 = np.max(inter_delay_0)    
+max1 = np.max([np.max(inters[i]) for i in range(len(inters))])
+max2 = np.max([max0, max1])
+
+n_bins = 60
+
+bins_array = np.linspace(0, max2 , n_bins)
+density_type = False
+
+fig, ax = plt.subplots(1,len(percentages))
+for i in range(len(percentages)):
+    
+
+    ax[i].hist(inter_delay_0, density = density_type, bins = bins_array, label = 'Delay = 0\nmean = {}'.format(np.around(mean_delay_0, 3)))
+    ax[i].hist(inters[i], bins = bins_array, density = density_type, alpha = 0.7, 
+               label = 'Delay = {}% mean'.format(100*percentages[i]))
+    ax[i].hist(inter_no_feedback, bins = bins_array, density = density_type, alpha = 0.3, label = 'No feedback')
+
+    ax[i].legend()
+    
+plt.show()
+
+
