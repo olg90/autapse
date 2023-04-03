@@ -63,11 +63,14 @@ def get_inter_AP_times(params):
     p_volt = 0
     p_vth = 0.2
     p_init = p_u
-    p_min = 0.05
-    p_drop = 0.05
-    p_k_return= 10
-    p_k_fall = 10
-    p_k = 10 # 20 not bad, larger p_k means bigger reductions, smaller means smaller reductions
+    p_min = 0.001
+    p_add = 0.05
+    p_k_voltage_reduction_rate = 10
+    p_k_return = 10 # 10
+    p_k_fall = 10 # 10 # 20 not bad, larger p_k means bigger reductions, smaller means smaller reductions
+
+    # Slow descent ret = 10, fall = 1
+    
     p_time = []
     
     # Main program
@@ -99,6 +102,7 @@ def get_inter_AP_times(params):
     
         # Release vesicles
         b_u = np.random.binomial(M_u-E_u, p_u) # Number released
+        print('Relased', b_u)
         E_u += b_u
     
         # Update the voltage 
@@ -127,17 +131,16 @@ def get_inter_AP_times(params):
         p_prev = p_curr
         p_curr = current_time
         t_diff_p = p_curr - p_prev
-        reduction_p = np.exp(-t_diff_p*p_k)
-        p_volt = p_volt * reduction_p
+        reduction_p_volt = np.exp(-t_diff_p*p_k_voltage_reduction_rate)
+        p_volt = p_volt * reduction_p_volt
         
         if p_volt >= p_vth:
-            if p_u - p_drop <= p_min:
+            if p_u*np.exp(-t_diff_p*p_k_fall) <= p_min:
                 p_u = p_min
             else:
-                #p_u -= p_drop
                 p_u = p_u*np.exp(-t_diff_p*p_k_fall)
         if (p_volt < p_vth) and (p_u < p_init):
-            if p_u + p_drop < p_vth:
+            if p_u*np.exp(t_diff_p*p_k_return) < p_vth:
                 p_u = p_u*np.exp(t_diff_p*p_k_return)
             else:
                 p_u = p_init
@@ -188,7 +191,7 @@ def get_inter_AP_times(params):
             current_time = current_time + delta_t
             
             # Add voltage to p_volt
-            p_volt = p_volt + p_drop
+            p_volt = p_volt + p_add
             p_hist.append(p_u)
             p_volt_hist.append(p_volt)
             p_time.append(current_time + delta_t)
