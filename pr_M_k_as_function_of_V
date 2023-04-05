@@ -1,0 +1,494 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.optimize import minimize
+
+def add_exp_time(AP_rate = 100):
+    return np.random.exponential( 1./AP_rate)
+
+def get_inter_AP_times(params):
+    
+    end_time = params['end_time']
+    delay_time = params['delay_time']
+    vth = params['vth']
+    delay_percentage = params['delay_percentage']
+    test_type = params['test_type']
+    
+    parameter = params['parameter']
+    
+    parameter_min = params['parameter_min']
+    parameter_max = params['parameter_max']
+    
+    end_time = end_time
+    delay_time = delay_time
+    vth = vth
+    
+    M_u = 70 # 70
+    M_d = 200 #200
+
+    E_u = 5
+    E_d = 5
+    
+    p_u = 0.3 # 0.3
+    p_d = 0.8 # 0.8
+
+    c_u = 0.02 # 0.02
+    c_d = 0.008 # 0.003
+    
+    k_u = 20
+    k_d = 125
+    
+    if test_type == 'FB':
+        k_strength = params['k_value']
+    
+    tau_d = 0.01 #0.001
+    
+    refractory_period_value = 0.001
+    
+    delay_timer = 'None'
+    refractory_period_timer = 'None'
+    delta_t = 1e-9    
+
+    previous_time = 0
+    current_time = 0   
+    membrane_voltage = 0
+    time_of_previous_vesicle_release_d = 0
+    time_of_current_vesicle_release_d = 0 
+    b_u = 0
+    b_d = 0
+    number_of_burst_events = 0
+    
+    v_history = []
+    times_list = []
+    AP_history = []
+    number_of_bursts_until_AP = []    
+
+    # Main program
+    while current_time < end_time:
+#        print(current_time / end_time)
+        add_time = add_exp_time()
+        next_AP_time = current_time + add_time
+              
+        # Is there a delay timer currently running?
+        if delay_timer != 'None':
+            #Will it end before the next action potential arrives?
+            if delay_timer <= add_time:
+                time_of_delay = current_time + delay_timer
+                membrane_voltage = -c_d*b_d
+                v_history.append(membrane_voltage)
+                times_list.append(time_of_delay)
+                delay_timer = 'None'
+            # Will it end at some time after the next action potential arrives?
+            else:
+                delay_timer = delay_timer - add_time
+        current_time = next_AP_time
+        
+        
+        if (parameter == 'k_u') and (test_type == 'FB'):
+            
+            if fb_type == 'positive':
+                k_u = parameter_min + (parameter_max - parameter_min) / (1 + k_strength * membrane_voltage)
+            if fb_type == 'negative':
+                k_u = parameter_max + (parameter_min - parameter_max) / (1 + k_strength * membrane_voltage)
+
+        
+        # Refill vesicles
+        t_difference = current_time - previous_time
+        refill_ratio = 1 - np.exp(-t_difference * k_u)
+        #refill_ratio = 1
+        vesicles_refilled = np.random.binomial(E_u, refill_ratio)
+        E_u -= vesicles_refilled
+    
+        # Release vesicles
+        if (parameter == 'p_u') and (test_type == 'FB'):
+            
+            if fb_type == 'positive':
+                p_u = parameter_min + (parameter_max - parameter_min) / (1 + k_strength * membrane_voltage)
+            if fb_type == 'negative':
+                p_u = parameter_max + (parameter_min - parameter_max) / (1 + k_strength * membrane_voltage)
+        
+        if (parameter == 'M_u') and (test_type == 'FB'):
+            
+            if fb_type == 'positive':
+                M_u = parameter_min + (parameter_max - parameter_min) / (1 + k_strength * membrane_voltage)
+            if fb_type == 'negative':
+                M_u = parameter_max + (parameter_min - parameter_max) / (1 + k_strength * membrane_voltage)
+
+
+
+        n_u = M_u - E_u
+        if n_u < 0:
+            n_u = 0
+        b_u = np.random.binomial(n_u, p_u) # Number released
+        E_u += b_u
+    
+        # Update the voltage 
+        reduction = np.exp(-(t_difference)/tau_d)
+        # Check to see if action potential occurres during refractory period
+        if refractory_period_timer != 'None':
+            if add_time <= refractory_period_timer:
+                voltage_addition = 0
+                refractory_period_timer = refractory_period_timer - add_time
+                if refractory_period_timer == 0:
+                    refractory_period_timer = 'None'
+            if add_time > refractory_period_timer:
+                refractory_period_timer = 'None'
+                voltage_addition = c_u*b_u
+        else:
+            voltage_addition = c_u*b_u   
+        membrane_voltage = membrane_voltage*reduction + voltage_addition 
+        v_history.append(membrane_voltage)
+        times_list.append(current_time)
+        previous_time = current_time
+        
+        # Update the number of burst events
+        number_of_burst_events += 1
+        
+        # Action potential 
+#        print('1', membrane_voltage, vth)
+        if membrane_voltage >= vth:
+            
+            # Update timers
+            if refractory_period_timer == 'None':
+                refractory_period_timer = refractory_period_value - delta_t              
+            if delay_timer != 'None':
+                delay_timer = delay_timer - delta_t                
+            if delay_timer == 'None':
+                delay_timer = np.random.uniform((1-delay_percentage) * delay_time, 
+                                                (1+delay_percentage)*delay_time)
+              
+            # Get burst numbers
+            number_of_bursts_until_AP.append(number_of_burst_events)
+            number_of_burst_events = 0               
+              
+            # Refill vesicles
+            time_of_current_vesicle_release_d = current_time
+            t_diff_vesc = time_of_current_vesicle_release_d - time_of_previous_vesicle_release_d
+            refill_ratio = 1 - np.exp(-t_diff_vesc * k_d) 
+            #refill_ratio = 1
+            vesicles_refilled = np.random.binomial(E_d, refill_ratio)
+            E_d -= vesicles_refilled
+            
+            #Release vesicles
+            b_d = np.random.binomial(M_d-E_d, p_d)
+            
+            E_d += b_d
+            time_of_previous_vesicle_release_d = current_time
+            if delay_timer == 0:
+                membrane_voltage = -c_d*b_d
+                delay_timer = 'None'
+            if (delay_timer != 0) and (delay_timer != 'None'):
+                membrane_voltage = 0
+            v_history.append(membrane_voltage)
+            times_list.append(current_time + delta_t)
+            AP_history.append(current_time)
+            previous_time = current_time
+            
+            # Update time
+            current_time = current_time + delta_t
+            
+    inter_AP_times = np.diff(AP_history)          
+    
+    return_dict = {'inter':inter_AP_times, 't':times_list, 'v':v_history, 'vth': vth,
+                   'b_nums':number_of_bursts_until_AP, 'AP_history':AP_history}
+
+    return return_dict
+
+def test_plot(end_time, delay_time2, vth, args, nfb, d0):
+
+    d2 = get_inter_AP_times(end_time, delay_time2, 0.2, args)
+    fig, ax = plt.subplots(3,1)
+    ax[0].plot(nfb['t'], nfb['v'], label = 'No Feedback')
+    ax[0].plot(nfb['t'], nfb['vth']*np.ones(len(nfb['t'])))
+    ax[0].legend()
+    ax[1].plot(d0['t'], d0['v'], label = 'Delay = 0')
+    ax[1].plot(d0['t'], d0['vth']*np.ones(len(d0['t'])))
+    ax[1].legend()
+    ax[1].set_ylabel('Membrane voltage')
+    ax[2].plot(d2['t'], d2['v'], label = 'Delay = {}'.format(delay_time2))
+    ax[2].plot(d2['t'], d2['vth']*np.ones(len(d2['t'])))
+    ax[2].legend()
+    ax[2].set_xlabel('Time')
+    
+    plt.show()
+
+def to_dict(**x):
+    return x
+
+def histograms_no_noise(end_time, delay_time0, delay_no_feedback, delay_percentage, 
+                        nfb, d0):
+    
+    #test_plot(end_time, delay_time2 = 0.1, vth = 0.2)
+     
+    #
+    percentages = [0, 0.5, 1]
+    
+    inters = []
+    ts = []
+    vs = []
+    vths = []
+    b_lists = []
+
+    mean_delay_0 = np.mean(d0['inter'])
+    
+    if len(d0['inter']) == 0:
+        print('NO AP\'s IN DOWNSTREAM NEURON')
+    
+    for i in range(len(percentages)):
+        
+        params_d = to_dict(end_time = end_time, delay_time = percentages[i]*mean_delay_0, 
+                           vth = 0.2, delay_percentage = delay_percentage)
+        
+        d = get_inter_AP_times(params_d)
+        inters.append(d['inter'])
+        ts.append(d['t'])
+        vs.append(d['v'])
+        vths.append(d['vth'])
+        b_lists.append(d['b_nums'])
+        
+    n_bins = 300
+    
+    bins_array = np.linspace(0, 3, n_bins)
+    density_type = True
+    
+    font_size = 20
+    
+    fig, ax = plt.subplots(3,1)
+    ax[0].hist(nfb['inter'] / np.mean(nfb['inter']), color ='tab:blue', 
+               bins = bins_array, density = density_type, alpha = 1, 
+               label = 'No feedback\n$CV_T$={}'.format(np.around(
+                   np.std(nfb['inter'])/np.mean(nfb['inter']),3))
+               )
+    ax[1].hist(d0['inter'] / np.mean(d0['inter']), color = 'tab:orange', 
+               density = density_type, 
+               alpha = 0.7, 
+               bins = bins_array, 
+               label = 'Feedback with\nno delay\n$CV_T$ = {}'.format(
+                  np.around(np.std(d0['inter'])/np.mean(d0['inter']),3))
+               )
+    ax[2].hist(inters[1] / np.mean(inters[1]), color = 'green', bins = bins_array,
+               density = density_type, 
+               label = 'Feedback with \nstochastic delay\n$CV_T={}$'.format(\
+                np.around(np.std(inters[i])/np.mean(inters[1]),3))
+               )
+    
+    ax[0].set_xticks([])
+    ax[1].set_xticks([])
+    
+    ax[0].tick_params(axis = 'y', labelsize = font_size)
+    ax[1].tick_params(axis = 'y', labelsize = font_size)
+    ax[2].tick_params(axis = 'y', labelsize = font_size)
+    ax[2].tick_params(axis = 'x', labelsize = font_size)
+    ax[2].legend(fontsize = font_size, handlelength = 0)
+    ax[0].legend(fontsize = font_size, handlelength = 0)
+    ax[1].legend(fontsize = font_size, handlelength = 0)
+        
+    ax[2].set_xlabel('Normalized postynaptic AP firing time', size = font_size)
+    ax[1].set_ylabel('Probability', size = font_size)
+        
+    plt.show()
+    
+def histograms_noise(end_time, delay_time0, delay_no_feedback, 
+                     delay_mean_percentage, delay_percentage_list, nfb, d0):
+    
+    #test_plot(end_time, delay_time2 = 0.1, vth = 0.2)
+     
+    inters = []
+    ts = []
+    vs = []
+    vths = []
+    b_lists = []
+    
+    mean_delay_0 = np.mean(d0['inter'])
+    
+    for i in range(len(delay_percentage_list)):
+        params_d = to_dict(end_time = end_time, delay_time = delay_mean_percentage*mean_delay_0, 
+                           vth = 0.2, delay_percentage = delay_percentage_list[i])
+        
+        d = get_inter_AP_times(params_d)
+        inters.append(d['inter'])
+        ts.append(d['t'])
+        vs.append(d['v'])
+        vths.append(d['vth'])
+        b_lists.append(d['b_nums'])
+        
+    n_bins = 100
+    
+    bins_array = np.linspace(0, 3, n_bins)
+    density_type = True
+    
+    font_size = 20
+    
+    fig, ax = plt.subplots(len(delay_percentage_list)+2,1)
+    
+    ax[0].hist(nfb['inter'] / np.mean(nfb['inter']), color ='tab:blue', 
+               bins = bins_array, density = density_type, alpha = 1, 
+               label = 'No feedback\n$CV_T$={}'.format(np.around(
+                   np.std(nfb['inter'])/np.mean(nfb['inter']),3)))
+    ax[0].legend(loc = 'upper right', fontsize = font_size)
+    ax[0].tick_params(axis = 'y', labelsize = font_size)
+    ax[0].tick_params(axis = 'x', labelsize = font_size)
+    
+    for i in range(len(delay_percentage_list)):
+
+        ax[i+1].hist(inters[i] / np.mean(inters[i]), color = 'green', bins = bins_array,
+                   density = density_type, 
+                   label = 'Noise = +-{}%\n$CV_T={}$'.format(\
+                    100*np.around(delay_percentage_list[i],3),
+                    np.around(np.std(inters[i])/np.mean(inters[i]),3)))
+        ax[i+1].tick_params(axis = 'y', labelsize = font_size)
+        ax[i+1].tick_params(axis = 'x', labelsize = font_size)
+        ax[i+1].legend(fontsize = font_size, loc = 'upper right')
+        
+    ax[len(delay_percentage_list)+1].hist(d0['inter'] / np.mean(d0['inter']), color = 'tab:orange', 
+               density = density_type, 
+               alpha = 0.7, 
+               bins = bins_array, 
+               label = 'Feedback with no delay\n$CV_T$ = {}'.format(
+                  np.around(np.std(d0['inter'])/np.mean(d0['inter']),3)))
+    ax[len(delay_percentage_list)+1].legend(fontsize = font_size, loc = 'upper right')
+    ax[len(delay_percentage_list) + 1].set_xlabel('Normalized postynaptic\nAP firing time', size = font_size)
+    ax[3].set_ylabel('Probability', size = font_size)
+    ax[len(delay_percentage_list)+1].tick_params(axis = 'x', labelsize = font_size)
+    ax[len(delay_percentage_list)+1].tick_params(axis = 'y', labelsize = font_size)
+    ax[len(delay_percentage_list)+1].tick_params(axis = 'x', labelsize = font_size)
+
+    plt.show()
+
+###############################################################################
+#
+#                                 Main code
+#
+###############################################################################
+end_time = 60
+delay_time0 = 0
+delay_no_feedback = 1e6
+delay_percentage = 0
+vth = 0.2
+
+p_min_fb = 0.001
+p_max_fb = 0.3
+p_nfb = 0.3
+
+parameter = 'k_u' # p_u, M_u or k_u
+parameter_min = 0 # for p_u = 0.1,
+parameter_max = 1000 # for p_u = 0.5
+fb_type = 'positive' # 'positive' or 'negative'
+equal_type = 'unequal' # 'equal' or 'unequal'
+
+k_value_list = np.linspace(0, 1000, 1000)
+
+CVs = []
+
+for i, k_value in enumerate(k_value_list):
+    
+    print(i/len(k_value_list))
+    
+    params_nfb = to_dict(end_time = end_time, delay_time = delay_no_feedback, vth = vth,
+                     delay_percentage = delay_percentage, 
+                     parameter = parameter,
+                     parameter_min = p_nfb, 
+                     parameter_max = p_nfb,
+                     test_type = 'NFB',
+                     fb_type = 'positve')
+    
+    nfb = get_inter_AP_times(params_nfb)
+    
+    if equal_type == 'equal':
+
+        v_threshold_value = 0.2
+        nfb = get_inter_AP_times(params_nfb)
+        mean_nfb = np.mean(nfb['inter'])
+        
+        def f(v_threshold_value, end_time, delay_time, delay_percentage, parameter,
+              parameter_min, parameter_max, test_type, k_value, fb_type, mean_nfb):   
+            
+            params_fb = to_dict(end_time = end_time, 
+                                delay_time = delay_no_feedback, 
+                                vth = v_threshold_value,
+                                delay_percentage = delay_percentage,
+                                parameter = parameter,
+                                parameter_min = parameter_min, 
+                                parameter_max = parameter_max,
+                                test_type = 'FB',
+                                k_value = k_value,
+                                fb_type = fb_type)
+            
+            fb = get_inter_AP_times(params_fb)
+            mean_error = np.abs(np.mean(fb['inter']) - mean_nfb)
+            
+            return mean_error
+        
+        res = minimize(f, v_threshold_value, args = (end_time, delay_no_feedback, delay_percentage, parameter,
+                                                     parameter_min, parameter_max, 'FB',
+                                                     k_value, fb_type, mean_nfb), method = 'Nelder-Mead',
+                                                     tol = 1e-6)
+        v_threshold_value = res.x[0]
+    
+        params_fb = to_dict(end_time = end_time, 
+                            delay_time = delay_no_feedback, 
+                            vth = v_threshold_value,
+                            delay_percentage = delay_percentage,
+                            parameter = parameter,
+                            parameter_min = parameter_min, 
+                            parameter_max = parameter_max,
+                            test_type = 'FB',
+                            k_value = k_value,
+                            fb_type = fb_type)
+    else:
+        params_fb = to_dict(end_time = end_time, delay_time = delay_no_feedback, vth = vth,
+                            delay_percentage = delay_percentage,
+                            parameter = parameter,
+                            parameter_min = parameter_min, 
+                            parameter_max = parameter_max,
+                            test_type = 'FB',
+                            k_value = k_value,
+                            fb_type = fb_type)
+
+    fb = get_inter_AP_times(params_fb)
+    
+    CV_nfb = np.std(nfb['inter'])/np.mean(nfb['inter'])
+    CV_fb = np.std(fb['inter'])/np.mean(fb['inter'])
+    
+    normalized_CV = CV_fb / CV_nfb
+    CVs.append(normalized_CV)
+
+# Final plot
+plt.plot(k_value_list, CVs)
+plt.title('{} min =  {}, {} max = {}, feedback is {}'.format(parameter, parameter_min,
+                                                             parameter, parameter_max,
+                                                             fb_type), size = 20)
+plt.xlabel('$k$ values', size = 20)
+plt.ylabel('Normalized $CV$', size = 20)
+plt.xticks(fontsize = 20)
+plt.yticks(fontsize = 20)
+plt.show()
+
+# =============================================================================
+# # Inset negative feedback
+# v_linear = np.linspace(0, 2, 1000)
+# k_values_test = np.linspace(10, 100, 10)
+# for k_strength in k_values_test:
+#     plt.plot(v_linear, parameter_min + (parameter_max - parameter_min)/(1+k_strength*v_linear), 
+#              label = 'k = {}'.format(k_strength))    
+# plt.title('Positive Feedback', size = 20)
+# plt.legend(fontsize = 20)
+# plt.xticks(size = 20)
+# plt.yticks(size = 20)
+# plt.xlabel('Voltage', size = 20)
+# plt.ylabel(parameter, size = 20)
+# plt.show()
+#
+# # Inset negative feedback
+# v_linear = np.linspace(0, 2, 1000)
+# k_values_test = np.linspace(10, 100, 10)
+# for k_strength in k_values_test:
+#     plt.plot(v_linear, parameter_max + (parameter_min - parameter_max)/(1+k_strength*v_linear), 
+#              label = 'k = {}'.format(k_strength))
+# plt.title('Negative Feedback', size = 20)
+# plt.legend(fontsize = 20)
+# plt.xticks(size = 20)
+# plt.yticks(size = 20)
+# plt.xlabel('Voltage', size = 20)
+# plt.ylabel(parameter, size = 20)
+# plt.show()
+# =============================================================================
