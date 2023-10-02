@@ -1,0 +1,261 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+
+def add_exp_time(AP_rate):
+    return np.random.exponential( 1./AP_rate)
+
+
+def get_inter_AP_times(params, end_time, delay_time, vth, delay_percentage, cval):
+
+    
+    end_time = end_time
+    delay_time = delay_time
+    vth = vth
+
+    previous_time = 0
+    current_time = 0
+    
+    membrane_voltage = 0
+    delta_t = 1e-9
+    
+    time_of_previous_vesicle_release_d = 0
+    time_of_current_vesicle_release_d = 0
+    
+    f = params['f']
+    
+    M_u = params['M_u'] # 70
+    M_d = params['M_d'] #200
+    
+    E_u = params['E_u']
+    E_d = params['E_d']
+    
+    p_u = params['p_u'] # 0.3
+    p_d = params['p_d'] # 0.8
+    
+    c_u = params['c_u'] # 0.02
+    c_d = cval # 0.003
+    
+    k_u = params['k_u'] #1/(50e-3) = 20
+    k_d = params['k_d'] # 1/(8e-3) = 125
+    
+    tau_v = params['tau_v'] #0.001, 
+    
+    
+    vth = params['vth']
+    
+    refractory_period_value = params['refractory_period_value']
+    
+# =============================================================================
+#     M_u = 50 # 70
+#     M_d = 100 #200
+#     
+#     E_u = 5
+#     E_d = 5
+#     
+#     p_u = 0.3 # 0.3
+#     p_d = 0.8 # 0.8
+#     
+#     c_u = 0.02 # 0.02
+#     c_d = cval # 0.003
+#     
+#     k_u = 20 #1/(50e-3) = 20
+#     k_d = 125 # 1/(8e-3) = 125
+#     
+#     tau_v = 0.01 #0.001, 
+#     
+#     refractory_period_value = 0.001
+# =============================================================================
+    
+    delay_timer = 'None'
+    refractory_period_timer = 'None'
+    
+    v_history = []
+    times_list = []
+    AP_history = []
+    
+    b_u = 0
+    b_d = 0
+    
+    number_of_burst_events = 0
+    number_of_bursts_until_AP = []
+    
+    while current_time < end_time:
+#        print(current_time / end_time)
+        add_time = add_exp_time(f)
+        next_AP_time = current_time + add_time
+           
+        # Is there a delay timer currently running?
+        if delay_timer != 'None':
+            #Will it end before the next action potential arrives?
+            if delay_timer <= add_time:
+                time_of_delay = current_time + delay_timer
+                membrane_voltage = -c_d*b_d
+                v_history.append(membrane_voltage)
+                times_list.append(time_of_delay)
+                delay_timer = 'None'
+            # Will it end at some time after the next action potential arrives?
+            else:
+                delay_timer = delay_timer - add_time
+
+        current_time = next_AP_time
+        
+        # Refill vesicles
+        t_difference = current_time - previous_time
+        refill_ratio = 1 - np.exp(-t_difference * k_u)
+        #refill_ratio = 1
+        vesicles_refilled = np.random.binomial(E_u, refill_ratio)
+        E_u -= vesicles_refilled
+    
+        # Release vesicles
+        b_u = np.random.binomial(M_u-E_u, p_u) # Number released
+        E_u += b_u
+    
+        # Update the voltage 
+        reduction = np.exp(-(t_difference)/tau_v)
+        # Check to see if action potential occurres during refractory period
+        if refractory_period_timer != 'None':
+            if add_time <= refractory_period_timer:
+                voltage_addition = 0
+                refractory_period_timer = refractory_period_timer - add_time
+                if refractory_period_timer == 0:
+                    refractory_period_timer = 'None'
+            if add_time > refractory_period_timer:
+                refractory_period_timer = 'None'
+                voltage_addition = c_u*b_u
+        else:
+            voltage_addition = c_u*b_u
+            
+        membrane_voltage = membrane_voltage*reduction + voltage_addition 
+        v_history.append(membrane_voltage)
+        times_list.append(current_time)
+        previous_time = current_time
+        
+        number_of_burst_events += 1
+        
+        if membrane_voltage >= vth:
+            
+            number_of_bursts_until_AP.append(number_of_burst_events)
+            number_of_burst_events = 0
+            
+            if refractory_period_timer == 'None':
+                refractory_period_timer = refractory_period_value - delta_t
+                
+            if delay_timer != 'None':
+                delay_timer = delay_timer - delta_t
+                
+            if delay_timer == 'None':
+                #delay_timer = delay_time
+                delay_timer = np.random.uniform((1-delay_percentage) * delay_time, (1+delay_percentage)*delay_time)
+              
+            # Refill vesicles
+            time_of_current_vesicle_release_d = current_time
+            t_diff_vesc = time_of_current_vesicle_release_d - time_of_previous_vesicle_release_d
+            refill_ratio = 1 - np.exp(-t_diff_vesc * k_d) 
+            #refill_ratio = 1
+            vesicles_refilled = np.random.binomial(E_d, refill_ratio)
+            E_d -= vesicles_refilled
+            
+            #Release vesicles
+            b_d = np.random.binomial(M_d-E_d, p_d)
+            E_d += b_d
+            time_of_previous_vesicle_release_d = current_time
+            if delay_timer == 0:
+                membrane_voltage = -c_d*b_d
+                delay_timer = 'None'
+            if (delay_timer != 0) and (delay_timer != 'None'):
+                membrane_voltage = 0
+            v_history.append(membrane_voltage)
+            times_list.append(current_time + delta_t)
+            AP_history.append(current_time)
+            previous_time = current_time
+            
+            current_time = current_time + delta_t
+            
+    inter_AP_times = np.diff(AP_history)          
+    
+    CV2 = np.var(inter_AP_times) / np.mean(inter_AP_times)**2
+    mean_inter_AP_times = np.mean(inter_AP_times)
+    
+    return_dict = {'inter':inter_AP_times, 't':times_list, 'v':v_history, 'vth': vth,
+                   'b_nums':number_of_bursts_until_AP, 'mean_T':mean_inter_AP_times,
+                   'CV2':CV2}
+
+    return return_dict
+
+def to_dict(**x):
+    return x
+
+###############################################################################
+#
+#                              Main code
+#
+###############################################################################
+
+end_time = 60*60
+delay_time0 = 0
+delay_no_feedback = 1e6
+delay_percentage = 0
+
+c_vals = np.linspace(0, 14e-3, 100)
+
+CV2_sim = np.zeros(len(c_vals))
+mean_T_sim = np.zeros(len(c_vals))
+
+CV2_eq = np.zeros(len(c_vals))
+mean_T_eq = np.zeros(len(c_vals))
+
+for i, cval in enumerate(c_vals):
+    print(i/len(c_vals))
+    
+    
+    f = 30
+    
+    M_u = 20 # 70
+    M_d = 20 #200
+    
+    E_u = 5
+    E_d = 5
+    
+    p_u = 0.4 # 0.3
+    p_d = 1 # 0.8
+    
+    c_u = 0.02 # 0.02
+    c_d = cval # 0.003
+    
+    k_u = 1e9 #1/(50e-3) = 20
+    k_d = 1e9 # 1/(8e-3) = 125
+    
+    tau_v = 0.025 #0.001, 
+    
+    vth = 0.2 
+    
+    refractory_period_value = 0.001
+    
+    params = to_dict(f = f,M_u = M_u, M_d = M_d, #200
+        E_u = E_u,E_d = E_d,p_u = p_u,p_d = p_d, # 0.8
+        c_u = c_u, c_d = c_d,k_u = k_u,k_d = k_d, # 1/(8e-3) = 125
+        tau_v = tau_v, vth = vth, 
+        refractory_period_value = refractory_period_value)
+    
+# =============================================================================
+#     nfb = get_inter_AP_times(f, params, end_time, delay_no_feedback, vth = 0.2, 
+#                              delay_percentage = delay_percentage, cval = cval)
+# =============================================================================
+
+    d0 = get_inter_AP_times(params, end_time, delay_time0, vth = 0.2, 
+                            delay_percentage = delay_percentage, cval = cval)
+    
+    CV2_sim[i] = d0['CV2']
+    mean_T_sim[i] = d0['mean_T']
+    
+# =============================================================================
+#     vmax = k_u*c_u*f*M_u*p_u*tau_v/(f*p_u + 1)
+# =============================================================================
+    vmax = c_u*f*M_u*p_u*tau_v
+    mean_T_eq[i] = tau_v*np.log((1 + c_d*M_d*p_d/(vmax))/(1 - vth/vmax))
+
+plt.plot(mean_T_eq, label = 'e')
+plt.plot(mean_T_sim, label = 's')
+plt.legend()
+plt.show()
