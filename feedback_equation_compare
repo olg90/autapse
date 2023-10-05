@@ -8,7 +8,6 @@ def add_exp_time(AP_rate):
 
 def get_inter_AP_times(params, end_time, delay_time, vth, delay_percentage, cval):
 
-    
     end_time = end_time
     delay_time = delay_time
     vth = vth
@@ -45,28 +44,7 @@ def get_inter_AP_times(params, end_time, delay_time, vth, delay_percentage, cval
     vth = params['vth']
     
     refractory_period_value = params['refractory_period_value']
-    
-# =============================================================================
-#     M_u = 50 # 70
-#     M_d = 100 #200
-#     
-#     E_u = 5
-#     E_d = 5
-#     
-#     p_u = 0.3 # 0.3
-#     p_d = 0.8 # 0.8
-#     
-#     c_u = 0.02 # 0.02
-#     c_d = cval # 0.003
-#     
-#     k_u = 20 #1/(50e-3) = 20
-#     k_d = 125 # 1/(8e-3) = 125
-#     
-#     tau_v = 0.01 #0.001, 
-#     
-#     refractory_period_value = 0.001
-# =============================================================================
-    
+        
     delay_timer = 'None'
     refractory_period_timer = 'None'
     
@@ -106,11 +84,11 @@ def get_inter_AP_times(params, end_time, delay_time, vth, delay_percentage, cval
         #refill_ratio = 1
         vesicles_refilled = np.random.binomial(E_u, refill_ratio)
         E_u -= vesicles_refilled
-    
+
         # Release vesicles
         b_u = np.random.binomial(M_u-E_u, p_u) # Number released
         E_u += b_u
-    
+
         # Update the voltage 
         reduction = np.exp(-(t_difference)/tau_v)
         # Check to see if action potential occurres during refractory period
@@ -125,7 +103,7 @@ def get_inter_AP_times(params, end_time, delay_time, vth, delay_percentage, cval
                 voltage_addition = c_u*b_u
         else:
             voltage_addition = c_u*b_u
-            
+
         membrane_voltage = membrane_voltage*reduction + voltage_addition 
         v_history.append(membrane_voltage)
         times_list.append(current_time)
@@ -169,14 +147,18 @@ def get_inter_AP_times(params, end_time, delay_time, vth, delay_percentage, cval
             times_list.append(current_time + delta_t)
             AP_history.append(current_time)
             previous_time = current_time
-            
+
             current_time = current_time + delta_t
             
-    inter_AP_times = np.diff(AP_history)          
+    inter_AP_times = np.diff(AP_history) 
+    
+    percentage_skipped = 0.2
+    inter_AP_times = inter_AP_times[int(percentage_skipped*len(inter_AP_times)):]
     
     CV2 = np.var(inter_AP_times) / np.mean(inter_AP_times)**2
     mean_inter_AP_times = np.mean(inter_AP_times)
-    
+
+        
     return_dict = {'inter':inter_AP_times, 't':times_list, 'v':v_history, 'vth': vth,
                    'b_nums':number_of_bursts_until_AP, 'mean_T':mean_inter_AP_times,
                    'CV2':CV2}
@@ -197,7 +179,10 @@ delay_time0 = 0
 delay_no_feedback = 1e6
 delay_percentage = 0
 
-c_vals = np.linspace(0, 14e-3, 100)
+c_vals = np.linspace(0, 14e-3, 8)
+# =============================================================================
+# c_vals = np.linspace(0, 15e-1, 10)
+# =============================================================================
 
 CV2_sim = np.zeros(len(c_vals))
 mean_T_sim = np.zeros(len(c_vals))
@@ -208,11 +193,10 @@ mean_T_eq = np.zeros(len(c_vals))
 for i, cval in enumerate(c_vals):
     print(i/len(c_vals))
     
-    
-    f = 30
+    f = 30 # Hz
     
     M_u = 20 # 70
-    M_d = 20 #200
+    M_d = 20 # 200
     
     E_u = 5
     E_d = 5
@@ -223,12 +207,12 @@ for i, cval in enumerate(c_vals):
     c_u = 0.02 # 0.02
     c_d = cval # 0.003
     
-    k_u = 1e9 #1/(50e-3) = 20
-    k_d = 1e9 # 1/(8e-3) = 125
+    k_u = np.inf #1/(50e-3) = 20
+    k_d = np.inf # 1/(8e-3) = 125
     
     tau_v = 0.025 #0.001, 
     
-    vth = 0.2 
+    vth = 0.07
     
     refractory_period_value = 0.001
     
@@ -237,25 +221,33 @@ for i, cval in enumerate(c_vals):
         c_u = c_u, c_d = c_d,k_u = k_u,k_d = k_d, # 1/(8e-3) = 125
         tau_v = tau_v, vth = vth, 
         refractory_period_value = refractory_period_value)
-    
-# =============================================================================
-#     nfb = get_inter_AP_times(f, params, end_time, delay_no_feedback, vth = 0.2, 
-#                              delay_percentage = delay_percentage, cval = cval)
-# =============================================================================
 
-    d0 = get_inter_AP_times(params, end_time, delay_time0, vth = 0.2, 
+    d0 = get_inter_AP_times(params, end_time, delay_time0, vth = vth, 
+                            delay_percentage = delay_percentage, cval = cval)
+    d_infinite = get_inter_AP_times(params, end_time, 1e9, vth = vth, 
                             delay_percentage = delay_percentage, cval = cval)
     
     CV2_sim[i] = d0['CV2']
     mean_T_sim[i] = d0['mean_T']
-    
-# =============================================================================
-#     vmax = k_u*c_u*f*M_u*p_u*tau_v/(f*p_u + 1)
-# =============================================================================
-    vmax = c_u*f*M_u*p_u*tau_v
-    mean_T_eq[i] = tau_v*np.log((1 + c_d*M_d*p_d/(vmax))/(1 - vth/vmax))
 
-plt.plot(mean_T_eq, label = 'e')
-plt.plot(mean_T_sim, label = 's')
-plt.legend()
+    v_max = c_u*f*M_u*p_u*tau_v
+    
+    numerator_T_eq = (1 + c_d*M_d*p_d/v_max)
+    denominator_T_eq = (1 - vth/v_max)
+    mean_T_eq[i] = tau_v*np.log(numerator_T_eq/denominator_T_eq)
+    
+    CV2_eq[i] = c_u*(1-p_u + M_u*p_u)*tau_v**2/(2*v_max*mean_T_eq[i]**2)*\
+        (1/(1-vth/v_max)**2 - 1/(1+(c_d*M_d/v_max))**2)
+
+fig, ax = plt.subplots(1,2)
+ax[0].set_title('tau_v = 0.025')
+ax[0].plot(c_vals, mean_T_sim, label = 'simulation mean')
+ax[0].plot(c_vals, mean_T_eq, label = 'equation mean')
+
+ax[1].plot(c_vals, CV2_sim, label = 'simulation CV2')
+ax[1].plot(c_vals, CV2_eq, label = 'equation CV2')
+
+ax[0].legend()
+ax[1].legend()
+
 plt.show()
