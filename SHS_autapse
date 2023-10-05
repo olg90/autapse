@@ -163,9 +163,6 @@ for i, c_val in enumerate(c_vals):
     M_u = 20 
     M_d = 20 
     
-    E_u = 5
-    E_d = 5
-    
     p_u = 0.4 
     p_d = 1 
     
@@ -182,7 +179,7 @@ for i, c_val in enumerate(c_vals):
     delta_t = 0.01
     
     params = to_dict(run_time = run_time, f = f,M_u = M_u, M_d = M_d, 
-        E_u = E_u,E_d = E_d,p_u = p_u, p_d = p_d, 
+        p_u = p_u, p_d = p_d, 
         c_u = c_u, c_d = c_d, k_u = k_u,k_d = k_d, 
         tau_v = tau_v, vth = vth, delta_t = delta_t,
         refractory_period_value = refractory_period_value)    
