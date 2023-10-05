@@ -1,0 +1,213 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def get_time_to(text, f, k_u, M_u, n_u, k_d, M_d, n_d):
+    
+    if text == 'f':
+        return np.random.exponential(1./f)
+    
+    if text == 'n_u':
+        if M_u > n_u:
+            return np.random.exponential(1./(k_u*(M_u-n_u)))
+        else:
+            return np.inf
+        
+    if text == 'n_d':
+        if M_d > n_d:
+            return np.random.exponential(1./(k_d*(M_d-n_d)))
+        else:
+            return np.inf
+
+def get_arg_type(i):
+    
+    if i == 0:
+        return 'f'
+    if i == 1:
+        return 'n_u'
+    if i == 2:
+        return 'n_d'
+    if i == 2:
+        return 'measure'
+    
+def to_dict(**x):
+    return x
+
+def run_test(args):
+
+    run_time = args['run_time']
+    f = args['f']
+
+    k_u = args['k_u']
+    M_u = args['M_u']
+    p_u = args['p_u']
+    c_u = args['c_u']
+
+    k_d = args['k_d']
+    M_d = args['M_d']
+    p_d = args['p_d']
+    c_d = args['c_d']
+    
+    tau_v = args['tau_v']
+    vth = args['vth']
+
+    delta_t = args['delta_t']
+    
+    current_time = 0
+    v_membrane = 0
+    
+    n_u = 0
+    n_d = 0
+    
+    v_history = [[0, current_time]] # data array
+    AP_times = []
+
+    preneuron_firing_history = []
+    
+    t_measure = delta_t
+    
+    while current_time < run_time:
+        
+        time_to_f = get_time_to('f', f, k_u, M_u, n_u, k_d, M_d, n_d) # next reaction time
+        time_to_n_u = get_time_to('n_u', f, k_u, M_u, n_u, k_d, M_d, n_d)
+        time_to_n_d = get_time_to('n_d', f, k_u, M_u, n_u, k_d, M_d, n_d)
+            
+        times_array = np.array([time_to_f, time_to_n_u, time_to_n_d, t_measure])
+    
+        t_min_arg = np.argmin(times_array)
+        arg_type = get_arg_type(t_min_arg)
+        t_min = times_array[t_min_arg]
+    
+        if arg_type == 'f':
+            preneuron_firing_history.append(current_time)
+
+            b_u = np.random.binomial(n_u, p_u) # Number released
+            n_u -= b_u
+
+            voltage_addition = c_u*b_u
+            v_membrane += voltage_addition
+            
+            v_history.append([v_membrane, current_time])
+            
+            if v_membrane >= vth:
+                
+                b_d = np.random.binomial(n_d, p_d)
+                v_membrane = -c_d*b_d
+                n_d -= b_d
+                AP_times.append(current_time)
+
+            current_time += t_min
+            t_measure -= t_min
+
+        elif arg_type == 'n_u':
+            
+            if n_u < M_u:
+                n_u += 1            
+            
+            current_time += t_min
+            t_measure -= t_min
+            
+        elif arg_type == 'n_d':
+            
+            if n_d < M_d:
+                n_d += 1
+    
+            current_time += t_min
+            t_measure = t_min
+            
+        else:
+            v_membrane = v_membrane*np.exp(-t_min/tau_v)
+            
+            v_history.append([v_membrane, current_time])
+    
+            current_time += t_min
+            t_measure = delta_t
+            
+    v_history = np.array(v_history) # data array
+    AP_times = np.array(AP_times)
+    
+    inter_AP_times = np.diff(AP_times)
+    if len(inter_AP_times) < 2:
+        mean_inter_AP_time = np.nan
+        CV2 = np.nan
+    else:
+        mean_inter_AP_time = np.mean(inter_AP_times)
+        CV2 = np.var(inter_AP_times) / mean_inter_AP_time**2
+    
+    return {'v_history': np.array(v_history),
+            'AP_times':np.array(AP_times),
+            'inter_AP_times':np.array(inter_AP_times),
+            'mean_T':mean_inter_AP_time, 
+            'CV2':CV2}
+
+###############################################################################
+#
+#                               Main Code
+#
+###############################################################################
+# Test 1
+
+# Values of c to test
+c_vals = np.linspace(0, 14e-3, 8)
+
+# Set up arrays for filling up simulations and equations
+mean_T_sim = np.zeros_like(c_vals)
+mean_T_eq = np.zeros_like(c_vals)
+CV2_sim = np.zeros_like(c_vals)
+CV2_eq = np.zeros_like(c_vals)
+
+for i, c_val in enumerate(c_vals):
+    
+    run_time = 60*60
+    f = 30 # Hz
+    
+    M_u = 20 
+    M_d = 20 
+    
+    E_u = 5
+    E_d = 5
+    
+    p_u = 0.4 
+    p_d = 1 
+    
+    c_u = 0.02 
+    c_d = c_val 
+    
+    k_u = np.inf 
+    k_d = np.inf 
+    
+    tau_v = 0.025 
+    
+    vth = 0.07
+    refractory_period_value = 0.001
+    delta_t = 0.01
+    
+    params = to_dict(run_time = run_time, f = f,M_u = M_u, M_d = M_d, 
+        E_u = E_u,E_d = E_d,p_u = p_u, p_d = p_d, 
+        c_u = c_u, c_d = c_d, k_u = k_u,k_d = k_d, 
+        tau_v = tau_v, vth = vth, delta_t = delta_t,
+        refractory_period_value = refractory_period_value)    
+    
+    print(i/len(c_vals))
+    
+    result = run_test(params)
+    mean_T_sim[i] = result['mean_T']
+    CV2_sim[i] = result['CV2']
+    
+    v_max = c_u*f*M_u*p_u*tau_v
+    
+    numerator_T_eq = (1 + c_d*M_d*p_d/v_max)
+    denominator_T_eq = (1 - vth/v_max)
+    mean_T_eq[i] = tau_v*np.log(numerator_T_eq/denominator_T_eq)
+    
+    CV2_eq[i] = c_u*(1-p_u + M_u*p_u)*tau_v**2/(2*v_max*mean_T_eq[i]**2)*\
+        (1/(1-vth/v_max)**2 - 1/(1+(c_d*M_d/v_max))**2)
+
+fig, ax = plt.subplots(1,2)
+ax[0].plot(c_vals, mean_T_sim, label = 'mean_T_sim')
+ax[0].set_title('tau_v = {}'.format(tau_v))
+ax[0].plot(c_vals, mean_T_eq, label = 'mean_T_eq')
+ax[1].plot(c_vals, CV2_sim, label = 'CV2_sim')
+ax[1].plot(c_vals, CV2_eq, label = 'CV2_eq')
+ax[0].legend()
+ax[1].legend()
+plt.show()
