@@ -510,6 +510,8 @@ fig, ax = plt.subplots(2, 2)
 min_val = min(np.min(d5), np.min(d20), np.min(d1000), np.min(d1))
 max_val = max(np.max(d5), np.max(d20), np.max(d1000), np.max(d1))
 
+#%%
+
 # Create subplots
 fig, ax = plt.subplots(2, 2)
 
