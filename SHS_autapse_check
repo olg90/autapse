@@ -1,0 +1,126 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+from numpy import inf, argmin, array, exp, var, nan, mean, diff, log, linspace, isnan, zeros, arange
+from numpy.random import exponential, binomial
+
+def run_test(f, c_u, c_d, p_u, p_d, k_u, k_d, M_u, M_d, tau_v, vth, run_time):
+    current_time = 0
+    v = 0
+    n_u = 0
+    n_d = 0
+    AP_times = []
+    while current_time < run_time:
+        t0=exponential(1./f)
+        t1=exponential(1./(k_u*(M_u-n_u)+1e-6))
+        t2=exponential(1./(k_d*(M_d-n_d)+1e-6))
+        if t0<t1 and t0<t2:
+            t_min=t0
+            b_u = binomial(n_u, p_u) # Number released
+            n_u -= b_u
+            v = v*np.exp(-t_min/tau_v)
+            v+=c_u*b_u
+            if v >= vth:
+                b_d = binomial(n_d, p_d)
+                v = -c_d*b_d
+                n_d -= b_d
+                AP_times.append(current_time)
+            current_time += t_min
+        elif t1<t0 and t1<t2:
+            t_min=t1
+            v = v*np.exp(-t_min/tau_v)
+            if n_u < M_u:
+                n_u += 1            
+            current_time += t_min
+        else:
+            t_min=t2
+            v = v*np.exp(-t_min/tau_v)
+            if n_d < M_d:
+                n_d += 1
+            current_time += t_min
+    AP_times = np.array(AP_times)
+    
+    inter_AP_times = np.diff(AP_times)
+    if len(inter_AP_times) < 2:
+        mean_inter_AP_time = np.nan
+        CV2 = np.nan
+    else:
+        mean_inter_AP_time = np.mean(inter_AP_times)
+        CV2 = np.var(inter_AP_times) / mean_inter_AP_time**2
+    
+    return mean_inter_AP_time, CV2
+###############################################################################
+#
+#                               Main Code
+#
+###############################################################################
+# Test 1
+    
+run_time = 1000
+f = 10 # Hz
+
+M_u = 50
+M_d = 50
+
+p_u = 0.1
+p_d = 0.1
+
+c_u = 0.02
+c_d = 0.02
+
+k_u = 100
+k_d = 1
+
+tau_v = 0.1
+
+vth = 0.1
+delta_t = 0.01
+# ------------------------------------------
+
+xlen=10
+ylen=10
+xs=np.arange(5,40,4) # Mu
+ys=np.linspace(0.05,1,ylen) #
+
+res=np.zeros((xlen,ylen))
+for i,x in enumerate(xs):
+    print(i/xlen)
+    for j,y in enumerate(ys):
+        cvs=[]
+        for ii in range(10):
+            _, cv=run_test(f, c_u, c_d, p_u, y, 
+                           k_u, k_d, M_u, x, tau_v, vth, run_time)
+            _, cv0=run_test(f, c_u, 0, p_u, y, 
+                           k_u, k_d, M_u, x, tau_v, vth, run_time)
+            cvs.append(cv/cv0)
+        res[i,j]=np.mean(cvs)
+
+plt.imshow(res, origin='lower', extent=[xs[0], xs[-1], ys[0], ys[-1]], aspect='auto')
+plt.colorbar()
+
+# =============================================================================
+# m,cv2=run_test(f, c_u, 0, p_u, p_d, 
+#                k_u, k_d, M_u, M_d, tau_v, vth, run_time)
+# m,cv2fb=run_test(f, c_u, c_d, p_u, p_d, 
+#                k_u, k_d, M_u, M_d, tau_v, vth, run_time)
+# =============================================================================
+
+# =============================================================================
+# vmax=c_u*k_u*M_u*f*p_u*tau_v/(f*p_u+k_u)
+# 
+# mm=tau_v*np.log((1+(c_d*M_d*p_d)/vmax)/(1-((vth)/(vmax))))
+# ccv=c_u*(1-p_u+M_u*p_u)/(c_d*M_d+vth)
+# 
+# m,cv2=run_test(f, c_u, c_d, p_u, p_d, k_u, k_d, M_u, M_d, tau_v, vth, run_time)
+# 
+# cond=c_u*k_u*M_u*p_u/(f*p_u+k_u)
+# 
+# print('m sim', m)
+# print('m theory', mm)
+# print('cv2 sim', cv2)
+# print('cv2 theory', ccv)
+# print('')
+# print('cond', cond)
+# print('vth', vth)
+# print('vmax', vmax)
+# =============================================================================
